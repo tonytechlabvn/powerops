@@ -127,6 +127,64 @@ def test_validate_variables_type_mismatch_reported() -> None:
     assert "count" in errors[0]
 
 
+def test_validate_variables_coerces_string_to_number() -> None:
+    """Form submissions send numbers as strings — coercion should handle it."""
+    tmpl = _make_template_with_vars(
+        TemplateVariable(name="size", type="number", required=True),
+    )
+    variables = {"size": "20"}
+    errors = te.validate_variables(tmpl, variables)
+    assert errors == []
+    assert variables["size"] == 20  # coerced in-place
+
+
+def test_validate_variables_coerces_string_to_bool() -> None:
+    tmpl = _make_template_with_vars(
+        TemplateVariable(name="enabled", type="bool", required=True),
+    )
+    variables = {"enabled": "true"}
+    errors = te.validate_variables(tmpl, variables)
+    assert errors == []
+    assert variables["enabled"] is True
+
+
+def test_validate_variables_empty_string_optional_uses_default() -> None:
+    """Empty strings for optional vars should be treated as not provided."""
+    tmpl = _make_template_with_vars(
+        TemplateVariable(name="region", type="string", default="us-east-1", required=False),
+    )
+    variables = {"region": ""}
+    errors = te.validate_variables(tmpl, variables)
+    assert errors == []
+    assert "region" not in variables  # removed so default fills in
+
+
+def test_validate_variables_empty_string_required_reports_error() -> None:
+    tmpl = _make_template_with_vars(
+        TemplateVariable(name="key_name", type="string", required=True),
+    )
+    errors = te.validate_variables(tmpl, {"key_name": ""})
+    assert len(errors) == 1
+    assert "empty" in errors[0].lower()
+
+
+def test_render_with_all_string_values_from_form(template_dir: Path) -> None:
+    """Simulate what the frontend actually sends — all values as strings."""
+    with _patch_template_root(template_dir):
+        output = te.render_template("aws/ec2-web-server", {
+            "key_name": "my-key",
+            "aws_region": "us-east-1",
+            "instance_type": "t3.micro",
+            "ami_id": "ami-0c02fb55956c7d316",
+            "instance_name": "web-server",
+            "allowed_ssh_cidr": "0.0.0.0/0",
+            "root_volume_size_gb": "20",
+            "environment": "dev",
+        })
+    assert "aws_instance" in output
+    assert "volume_size           = 20" in output
+
+
 # ---------------------------------------------------------------------------
 # render_template
 # ---------------------------------------------------------------------------

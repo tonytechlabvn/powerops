@@ -166,6 +166,24 @@ def get_template(name: str) -> Template:
     )
 
 
+def _coerce_value(value: Any, target_type: str) -> Any:
+    """Coerce a string value to the expected type. Returns original on failure."""
+    if not isinstance(value, str):
+        return value
+    if target_type == "number":
+        try:
+            return int(value) if "." not in value else float(value)
+        except (ValueError, TypeError):
+            return value
+    if target_type == "bool":
+        if value.lower() in ("true", "1", "yes"):
+            return True
+        if value.lower() in ("false", "0", "no"):
+            return False
+        return value
+    return value
+
+
 def validate_variables(template: Template, variables: dict[str, Any]) -> list[str]:
     """Validate user-supplied variables against the template schema.
 
@@ -184,6 +202,18 @@ def validate_variables(template: Template, variables: dict[str, Any]) -> list[st
                 errors.append(f"Required variable '{var.name}' is missing.")
             continue
 
+        value = variables[var.name]
+
+        # Treat empty strings as "not provided" — use default or flag missing
+        if isinstance(value, str) and not value.strip():
+            if var.required and var.default is None:
+                errors.append(f"Required variable '{var.name}' is empty.")
+            else:
+                del variables[var.name]  # let default fill in during merge
+            continue
+
+        # Coerce string values from form submissions to expected types
+        variables[var.name] = _coerce_value(value, var.type)
         value = variables[var.name]
 
         # Basic type checking

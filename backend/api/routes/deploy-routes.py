@@ -93,9 +93,13 @@ async def _run_deploy(
         ss.append_line(job_id, "[deploy] Plan completed — review and approve to apply")
 
     except Exception as exc:
+        # Include specific violations for ValidationError
+        error_msg = str(exc)
+        if hasattr(exc, "violations") and exc.violations:
+            error_msg += ": " + "; ".join(exc.violations)
         async with get_session() as session:
-            await JobService(session).fail_job(job_id, error=str(exc))
-        ss.append_line(job_id, f"[error] {exc}")
+            await JobService(session).fail_job(job_id, error=error_msg)
+        ss.append_line(job_id, f"[error] {error_msg}")
 
 
 @router.post("/deploy", response_model=DeployResponse)
