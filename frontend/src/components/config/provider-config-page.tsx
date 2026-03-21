@@ -60,7 +60,8 @@ function ProviderForm({ provider, title, description, fields }: ProviderFormProp
         return next
       })
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Save failed')
+      const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Save failed'
+      setFormError(msg)
     }
   }
 

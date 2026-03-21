@@ -148,6 +148,9 @@ export function useRenderTemplate() {
 export function useSaveProviderConfig() {
   return useMutation({
     mutationFn: (config: ProviderConfig) =>
-      apiClient.post<{ ok: boolean }>('/api/config/provider', config),
+      apiClient.post<{ ok: boolean }>('/api/config/provider', {
+        provider: config.provider,
+        credentials: config.config,
+      }),
   })
 }
