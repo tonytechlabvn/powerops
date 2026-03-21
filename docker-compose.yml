@@ -35,7 +35,7 @@ services:
     networks:
       - tony-net
     healthcheck:
-      test: ["CMD-SHELL", "opa eval true || exit 1"]
+      test: ["CMD", "/opa", "version"]
       interval: 10s
       timeout: 5s
       retries: 5
