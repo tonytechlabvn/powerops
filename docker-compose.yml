@@ -1,10 +1,13 @@
+networks:
+  tony-net:
+    external: true
+    name: tony-net
+
 services:
   powerops:
     build: .
-    container_name: powerops
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
+    container_name: powerops.tonytechlab.com
+    restart: always
     environment:
       - TERRABOT_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - TERRABOT_DB_URL=sqlite+aiosqlite:///./data/powerops.db
@@ -13,6 +16,18 @@ services:
     volumes:
       - powerops-data:/app/data
       - powerops-workspaces:/app/workspaces
+    networks:
+      - tony-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   powerops-data:

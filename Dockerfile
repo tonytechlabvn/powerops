@@ -23,8 +23,8 @@ COPY --from=backend /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 COPY --from=backend /app /app
 COPY --from=frontend /app/dist /app/static
 
-# Install terraform
-RUN apt-get update && apt-get install -y --no-install-recommends wget unzip \
+# Install terraform + curl (for healthcheck)
+RUN apt-get update && apt-get install -y --no-install-recommends wget unzip curl \
     && wget -q https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_amd64.zip \
     && unzip terraform_1.7.0_linux_amd64.zip -d /usr/local/bin \
     && rm terraform_1.7.0_linux_amd64.zip \
