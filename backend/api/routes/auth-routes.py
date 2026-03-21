@@ -15,6 +15,7 @@ from pathlib import Path as _P
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from sqlalchemy import func, select as sa_select
+from sqlalchemy.orm import selectinload
 
 from backend.db.database import get_session
 from backend.db.models import Organization, Team, TeamMembership, User
@@ -173,12 +174,13 @@ async def me(request: Request):
 
     async with get_session() as session:
         user = (await session.execute(
-            sa_select(User).where(User.id == user_id)
+            sa_select(User)
+            .where(User.id == user_id)
+            .options(selectinload(User.team_memberships).selectinload(TeamMembership.team))
         )).scalar_one_or_none()
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Eagerly load teams within session to avoid DetachedInstanceError
         team_names = [m.team.name for m in user.team_memberships if m.team]
         return _schemas.UserResponse(
             id=user.id,
