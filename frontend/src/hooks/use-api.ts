@@ -21,12 +21,29 @@ export const queryKeys = {
 }
 
 // --- Read hooks ---
+// Flatten API template shape {metadata: {...}, variables: [...]} into flat Template
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function flattenTemplate(raw: any): Template {
+  const meta = raw.metadata ?? raw
+  return {
+    name: meta.name ?? meta.display_name ?? '',
+    provider: meta.provider ?? '',
+    description: meta.description ?? '',
+    tags: meta.tags ?? [],
+    variables: (raw.variables ?? []).map((v: any) => ({
+      ...v,
+      required: v.required ?? (v.default === null || v.default === undefined),
+    })),
+    estimated_cost: meta.estimated_cost ?? null,
+  }
+}
+
 export function useTemplates(provider?: string) {
   return useQuery({
     queryKey: queryKeys.templates(provider),
     queryFn: async () => {
-      const res = await apiClient.get<{ templates: Template[] }>('/api/templates', provider ? { provider } : undefined)
-      return res.templates ?? []
+      const res = await apiClient.get<{ templates: any[] }>('/api/templates', provider ? { provider } : undefined)
+      return (res.templates ?? []).map(flattenTemplate)
     },
   })
 }
@@ -34,7 +51,10 @@ export function useTemplates(provider?: string) {
 export function useTemplate(name: string) {
   return useQuery({
     queryKey: queryKeys.template(name),
-    queryFn: () => apiClient.get<Template>(`/api/templates/${name}`),
+    queryFn: async () => {
+      const raw = await apiClient.get<any>(`/api/templates/${name}`)
+      return flattenTemplate(raw)
+    },
     enabled: !!name,
   })
 }
