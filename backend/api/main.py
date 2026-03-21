@@ -87,6 +87,11 @@ async def lifespan(app: FastAPI):
     logger.info("TerraBot API starting up...")
     await init_db()
     logger.info("Database ready.")
+    # Restore persisted provider credentials into env vars
+    try:
+        _config_routes.load_persisted_config()
+    except Exception as exc:
+        logger.warning("Could not load provider config: %s", exc)
     yield
     logger.info("TerraBot API shutting down...")
     await close_db()

@@ -4,6 +4,7 @@ POST /api/deploy — render template into workspace, run init+plan, return job_i
 """
 from __future__ import annotations
 
+import json
 import sys
 import uuid
 from pathlib import Path
@@ -19,6 +20,22 @@ from backend.api.services.job_service import JobService
 from backend.api.services.approval_service import ApprovalService
 
 router = APIRouter(prefix="/api", tags=["deploy"])
+
+
+def _extract_plan_errors(lines: list[str]) -> list[str]:
+    """Parse streamed Terraform JSON lines for error diagnostics."""
+    errors: list[str] = []
+    for line in lines:
+        try:
+            obj = json.loads(line)
+            if obj.get("@level") == "error":
+                msg = obj.get("@message", "")
+                diag = obj.get("diagnostic", {})
+                summary = diag.get("summary", "")
+                errors.append(summary or msg or "Unknown error")
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    return errors
 
 
 class DeployRequest(BaseModel):
@@ -81,6 +98,15 @@ async def _run_deploy(
         async for line in runner.stream("plan", "-json", "-no-color"):
             ss.append_line(job_id, line)
             buffered_lines.append(line)
+
+        # Check for errors in streamed plan output
+        plan_errors = _extract_plan_errors(buffered_lines)
+        if plan_errors:
+            error_msg = "; ".join(plan_errors)
+            async with get_session() as session:
+                await JobService(session).fail_job(job_id, error=error_msg)
+            ss.append_line(job_id, f"[error] Plan failed: {error_msg}")
+            return
 
         # Get structured plan result for approval
         result = await runner.plan()

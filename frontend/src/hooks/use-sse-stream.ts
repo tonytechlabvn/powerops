@@ -67,8 +67,9 @@ export function useSSEStream(jobId: string | null): SSEStreamState {
         es.close()
       })
 
-      // Error from server
+      // Error from server (custom event, not connection error)
       es.addEventListener('error', (e: MessageEvent) => {
+        if (!e.data) return // ignore connection-level errors (handled by onerror)
         setLines(prev => [...prev, `[error] ${e.data}`])
         setStatus('error')
         setError(e.data)
