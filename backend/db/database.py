@@ -1,7 +1,8 @@
 """Async SQLAlchemy engine, session factory, and database initialisation.
 
-Uses aiosqlite driver for SQLite. Session lifecycle is managed via
-async context manager — always use get_session() in application code.
+Supports PostgreSQL (asyncpg) as primary and SQLite (aiosqlite) as fallback.
+Session lifecycle is managed via async context manager — always use
+get_session() in application code.
 """
 from __future__ import annotations
 
@@ -18,10 +19,6 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Declarative base — shared by all ORM models in db/models.py
-# ---------------------------------------------------------------------------
 
 
 class Base(DeclarativeBase):
@@ -46,16 +43,9 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     return _session_factory
 
 
-def _migrate_jobs_is_hidden(connection) -> None:
-    """Add is_hidden column to jobs table if it doesn't exist (no Alembic)."""
-    from sqlalchemy import inspect, text
-    inspector = inspect(connection)
-    columns = [c["name"] for c in inspector.get_columns("jobs")]
-    if "is_hidden" not in columns:
-        connection.execute(
-            text("ALTER TABLE jobs ADD COLUMN is_hidden BOOLEAN DEFAULT 0 NOT NULL")
-        )
-        logger.info("Migration: added is_hidden column to jobs table.")
+def _is_sqlite(db_url: str) -> bool:
+    """Check if the connection string targets SQLite."""
+    return "sqlite" in db_url
 
 
 async def init_db(db_url: str | None = None) -> AsyncEngine:
@@ -63,12 +53,6 @@ async def init_db(db_url: str | None = None) -> AsyncEngine:
 
     Safe to call multiple times — subsequent calls are no-ops if the engine
     is already initialised with the same URL.
-
-    Args:
-        db_url: SQLAlchemy connection string. Defaults to Settings.db_url.
-
-    Returns:
-        The initialised AsyncEngine instance.
     """
     global _engine, _session_factory
 
@@ -80,13 +64,19 @@ async def init_db(db_url: str | None = None) -> AsyncEngine:
         logger.debug("Database already initialised, skipping init_db()")
         return _engine
 
-    logger.info("Initialising database: %s", db_url)
+    logger.info("Initialising database: %s", db_url.split("@")[-1] if "@" in db_url else db_url)
 
-    _engine = create_async_engine(
-        db_url,
-        echo=False,
-        connect_args={"check_same_thread": False} if "sqlite" in db_url else {},
-    )
+    # Build engine kwargs based on dialect
+    engine_kwargs: dict = {"echo": False}
+    if _is_sqlite(db_url):
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        # PostgreSQL connection pool settings
+        engine_kwargs["pool_size"] = 10
+        engine_kwargs["max_overflow"] = 20
+        engine_kwargs["pool_pre_ping"] = True
+
+    _engine = create_async_engine(db_url, **engine_kwargs)
 
     _session_factory = async_sessionmaker(
         bind=_engine,
@@ -101,8 +91,6 @@ async def init_db(db_url: str | None = None) -> AsyncEngine:
 
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Lightweight migration: add is_hidden column if missing on existing DBs
-        await conn.run_sync(_migrate_jobs_is_hidden)
 
     logger.info("Database tables created/verified.")
     return _engine
@@ -123,12 +111,6 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Async context manager that yields a transactional database session.
 
     Commits on clean exit, rolls back on exception.
-
-    Usage::
-
-        async with get_session() as session:
-            session.add(job)
-            # auto-commit on exit
     """
     factory = _get_session_factory()
     async with factory() as session:

@@ -76,6 +76,27 @@ _import_routes    = _load("routes/import-routes.py",    "routes.import_routes")
 _deploy_routes      = _load("routes/deploy-routes.py",      "routes.deploy_routes")
 _auto_deploy_routes = _load("routes/auto-deploy-routes.py", "routes.auto_deploy_routes")
 
+# Phase 1: State management routes
+_state_schemas = _load("schemas/state-schemas.py", "schemas.state_schemas")
+_state_routes  = _load("routes/state-routes.py",   "routes.state_routes")
+
+# Phase 2: Auth & RBAC routes
+_auth_schemas  = _load("schemas/auth-schemas.py",  "schemas.auth_schemas")
+_permission_mw = _load("middleware/permission-middleware.py", "middleware.permission_middleware")
+_auth_routes   = _load("routes/auth-routes.py",    "routes.auth_routes")
+_user_routes   = _load("routes/user-routes.py",    "routes.user_routes")
+_team_routes   = _load("routes/team-routes.py",    "routes.team_routes")
+_org_routes    = _load("routes/org-routes.py",     "routes.org_routes")
+
+# Phase 3: VCS integration routes
+_vcs_schemas     = _load("schemas/vcs-schemas.py",     "schemas.vcs_schemas")
+_webhook_routes  = _load("routes/webhook-routes.py",   "routes.webhook_routes")
+_vcs_routes      = _load("routes/vcs-routes.py",       "routes.vcs_routes")
+
+# Phase 4: Policy routes
+_policy_schemas = _load("schemas/policy-schemas.py", "schemas.policy_schemas")
+_policy_routes  = _load("routes/policy-routes.py",   "routes.policy_routes")
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -93,6 +114,29 @@ async def lifespan(app: FastAPI):
         _config_routes.load_persisted_config()
     except Exception as exc:
         logger.warning("Could not load provider config: %s", exc)
+
+    # Phase 4: Seed starter policies on first boot + sync all to OPA
+    try:
+        import importlib.util as _ilu2
+        import sys as _sys2
+        from pathlib import Path as _P2
+        _core_dir = _P2(__file__).parent.parent / "core"
+        _pe_name = "backend.core.policy_evaluator"
+        if _pe_name not in _sys2.modules:
+            _spec = _ilu2.spec_from_file_location(_pe_name, _core_dir / "policy-evaluator.py")
+            _pe_mod = _ilu2.module_from_spec(_spec)
+            _sys2.modules[_pe_name] = _pe_mod
+            _spec.loader.exec_module(_pe_mod)
+        else:
+            _pe_mod = _sys2.modules[_pe_name]
+        seeded = await _pe_mod.seed_starter_policies()
+        if seeded:
+            logger.info("Seeded %d starter policies.", seeded)
+        synced = await _pe_mod.sync_policies_to_opa()
+        logger.info("Synced %d policies to OPA.", synced)
+    except Exception as exc:
+        logger.warning("Policy init skipped: %s", exc)
+
     yield
     logger.info("TerraBot API shutting down...")
     await close_db()
@@ -156,6 +200,22 @@ def create_app() -> FastAPI:
     # Deploy routes
     app.include_router(_deploy_routes.router)
     app.include_router(_auto_deploy_routes.router)
+
+    # Phase 1: State management
+    app.include_router(_state_routes.router)
+
+    # Phase 2: Auth & RBAC
+    app.include_router(_auth_routes.router)
+    app.include_router(_user_routes.router)
+    app.include_router(_team_routes.router)
+    app.include_router(_org_routes.router)
+
+    # Phase 3: VCS integration
+    app.include_router(_webhook_routes.router)
+    app.include_router(_vcs_routes.router)
+
+    # Phase 4: Policy
+    app.include_router(_policy_routes.router)
 
     # Serve frontend static files in production (built React app at /app/static)
     static_dir = Path(__file__).parent.parent.parent / "static"

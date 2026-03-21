@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     # Root directory for Jinja2 blueprint templates
     template_dir: Path = Path("./templates")
 
-    # SQLite async connection string (aiosqlite driver)
-    db_url: str = "sqlite+aiosqlite:///./terrabot.db"
+    # Database connection string (PostgreSQL default, SQLite fallback)
+    db_url: str = "postgresql+asyncpg://powerops:powerops@postgres:5432/powerops"
 
     # Concurrency cap for simultaneous terraform operations
     max_concurrent_ops: int = 5
@@ -32,6 +32,41 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     ai_model: str = "claude-sonnet-4-20250514"
     ai_max_tokens: int = 4096
+
+    # --- Phase 1: State management ---
+    # Base64-encoded 32-byte key for AES-256-GCM state encryption.
+    # If empty, state stored unencrypted (dev mode) with warning.
+    state_encryption_key: str = ""
+    # Max state versions to keep per workspace before pruning
+    state_max_versions: int = 50
+    # State lock lease timeout in seconds (default 10 min)
+    state_lock_timeout_seconds: int = 600
+
+    # --- Phase 2: Auth & RBAC ---
+    # JWT secret for signing tokens. REQUIRED in production.
+    jwt_secret: str = ""
+    # JWT access token TTL in minutes
+    jwt_access_ttl_minutes: int = 15
+    # JWT refresh token TTL in days
+    jwt_refresh_ttl_days: int = 7
+    # bcrypt hashing cost factor
+    bcrypt_rounds: int = 12
+
+    # --- Phase 3: VCS / GitHub App ---
+    # GitHub App ID (set after manifest flow or manual creation)
+    github_app_id: int = 0
+    # GitHub App private key PEM content (stored in DB after manifest flow)
+    github_private_key: str = ""
+    # GitHub webhook secret for HMAC-SHA256 verification
+    github_webhook_secret: str = ""
+    # Max concurrent VCS-triggered runs
+    vcs_max_concurrent_runs: int = 10
+
+    # --- Phase 4: Policy (OPA) ---
+    # OPA sidecar URL
+    opa_url: str = "http://opa:8181"
+    # Enable/disable policy checks on runs
+    policy_check_enabled: bool = True
 
     model_config = SettingsConfigDict(
         env_prefix="TERRABOT_",

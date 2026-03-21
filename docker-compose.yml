@@ -4,15 +4,66 @@ networks:
     name: tony-net
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: powerops-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: powerops
+      POSTGRES_USER: powerops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-powerops}
+    volumes:
+      - powerops-pgdata:/var/lib/postgresql/data
+    networks:
+      - tony-net
+    healthcheck:
+      test: ["CMD-LINE", "pg_isready -U powerops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  opa:
+    image: openpolicyagent/opa:0.70.0
+    container_name: powerops-opa
+    command: ["run", "--server", "--addr", ":8181"]
+    restart: always
+    networks:
+      - tony-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   powerops:
     build: .
     container_name: powerops.tonytechlab.com
     restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
     environment:
       - TERRABOT_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - TERRABOT_DB_URL=sqlite+aiosqlite:///./data/powerops.db
+      - TERRABOT_DB_URL=postgresql+asyncpg://powerops:${POSTGRES_PASSWORD:-powerops}@postgres:5432/powerops
       - TERRABOT_WORKING_DIR=/app/workspaces
       - TERRABOT_TEMPLATE_DIR=/app/templates
+      - TERRABOT_STATE_ENCRYPTION_KEY=${STATE_ENCRYPTION_KEY:-}
+      - TERRABOT_JWT_SECRET=${JWT_SECRET:-}
+      - TERRABOT_GITHUB_APP_ID=${GITHUB_APP_ID:-0}
+      - TERRABOT_GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
+      - TERRABOT_OPA_URL=http://opa:8181
     volumes:
       - powerops-data:/app/data
       - powerops-workspaces:/app/workspaces
@@ -30,5 +81,6 @@ services:
         max-file: "3"
 
 volumes:
+  powerops-pgdata:
   powerops-data:
   powerops-workspaces:

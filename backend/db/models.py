@@ -1,11 +1,15 @@
 """SQLAlchemy ORM models for TerraBot persistence layer.
 
-Job        — tracks every terraform operation with status and output.
-AuditLog   — append-only log of all user-initiated actions.
-Approval   — plan approval queue; one record per completed plan job.
-Workspace  — registered multi-workspace metadata.
-DriftCheck — historical drift detection results per workspace.
-User       — API key authentication records.
+Existing models (original + Phase 7):
+  Job, AuditLog, Approval, Workspace, DriftCheck
+
+New models by phase:
+  Phase 1 — StateVersion, StateLock
+  Phase 2 — Organization, User (rewritten), Team, TeamMembership,
+            WorkspacePermission, APIToken
+  Phase 3 — VCSConnection, WebhookDelivery
+  Phase 4 — Policy, PolicySet, PolicySetMember, PolicySetAssignment,
+            PolicyCheckResult
 
 These models are distinct from the Pydantic schemas in core/models.py.
 """
@@ -14,8 +18,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import (
+    BigInteger, Boolean, DateTime, ForeignKey, Integer,
+    LargeBinary, String, Text, UniqueConstraint, func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.database import Base
 
@@ -24,60 +32,46 @@ def _new_uuid() -> str:
     return str(uuid.uuid4())
 
 
+# ---------------------------------------------------------------------------
+# Original models
+# ---------------------------------------------------------------------------
+
+
 class Job(Base):
-    """Represents one terraform operation (init/plan/apply/destroy/etc).
+    """Terraform operation record (init/plan/apply/destroy/etc).
 
-    Columns:
-        id            — UUID primary key.
-        type          — terraform subcommand: plan | apply | destroy | init | validate.
-        status        — pending | running | completed | failed | cancelled.
-        workspace_dir — absolute path to the isolated workspace directory.
-        created_at    — UTC timestamp when the job was enqueued.
-        completed_at  — UTC timestamp when the job finished (NULL while running).
-        output        — full stdout captured from terraform.
-        error         — stderr or exception message on failure.
-        is_hidden     — soft-delete flag; hidden jobs excluded from default listing.
+    Phase 3 adds VCS trigger metadata fields.
     """
-
     __tablename__ = "jobs"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=_new_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="pending", index=True
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
     workspace_dir: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
-        nullable=False,
-        server_default=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
     completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=False), nullable=True, default=None
+        DateTime(timezone=True), nullable=True, default=None,
     )
     output: Mapped[str] = mapped_column(Text, nullable=False, default="")
     error: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    is_hidden: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="0"
-    )
+    is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+
+    # Phase 3: VCS trigger context
+    vcs_commit_sha: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
+    vcs_pr_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    vcs_trigger: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
+
+    # Relationships
+    policy_results: Mapped[list[PolicyCheckResult]] = relationship(back_populates="job", lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<Job id={self.id!r} type={self.type!r} status={self.status!r}>"
 
 
 class AuditLog(Base):
-    """Append-only audit trail for all user-initiated platform actions.
-
-    Columns:
-        id           — Auto-increment integer primary key.
-        action       — Short action label, e.g. "apply_started", "template_rendered".
-        user         — User identifier (username, API key prefix, or "system").
-        details_json — JSON-encoded dict with action-specific context.
-        timestamp    — UTC timestamp of the event.
-    """
-
+    """Append-only audit trail for all user-initiated platform actions."""
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -85,10 +79,7 @@ class AuditLog(Base):
     user: Mapped[str] = mapped_column(String(128), nullable=False, default="system")
     details_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
-        nullable=False,
-        server_default=func.now(),
-        index=True,
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True,
     )
 
     def __repr__(self) -> str:
@@ -96,93 +87,67 @@ class AuditLog(Base):
 
 
 class Approval(Base):
-    """Plan approval queue — one record created per completed plan job.
+    """Plan approval queue — one record per completed plan job.
 
-    Columns:
-        id                — UUID primary key.
-        job_id            — Foreign key to the plan Job that triggered this approval.
-        workspace         — Workspace name/path for display.
-        status            — pending | approved | rejected.
-        plan_summary_json — JSON-encoded list of ResourceChange dicts from the plan.
-        created_at        — UTC timestamp when the approval was created.
-        decided_at        — UTC timestamp when a decision was recorded (NULL if pending).
-        decided_by        — User identifier who made the decision (default "system").
-        reason            — Optional human-readable explanation for the decision.
+    Phase 4 adds policy override fields.
     """
-
     __tablename__ = "approvals"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=_new_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
     job_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     workspace: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="pending", index=True
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
     plan_summary_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
-        nullable=False,
-        server_default=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
     decided_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=False), nullable=True, default=None
+        DateTime(timezone=True), nullable=True, default=None,
     )
     decided_by: Mapped[str] = mapped_column(String(128), nullable=False, default="system")
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
+    # Phase 4: policy override support
+    policy_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    policy_override_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
     def __repr__(self) -> str:
-        return f"<Approval id={self.id!r} job_id={self.job_id!r} status={self.status!r}>"
+        return f"<Approval id={self.id!r} status={self.status!r}>"
 
 
 class Workspace(Base):
     """Registered Terraform workspace with provider and environment metadata.
 
-    Columns:
-        id            — UUID primary key.
-        name          — Unique logical workspace name.
-        provider      — Cloud provider label: aws | proxmox | azure | gcp.
-        environment   — Environment label: dev | staging | prod.
-        workspace_dir — Absolute path to the workspace directory on disk.
-        created_at    — UTC timestamp when the workspace was registered.
-        last_used     — UTC timestamp of last switch or operation.
+    Phase 2 adds org_id foreign key.
     """
-
     __tablename__ = "workspaces"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=_new_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
     name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     provider: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     environment: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     workspace_dir: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    org_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True, default=None,
+    )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
-        nullable=False,
-        server_default=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
     last_used: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=False), nullable=True, default=None
+        DateTime(timezone=True), nullable=True, default=None,
     )
+
+    # Relationships
+    state_versions: Mapped[list[StateVersion]] = relationship(back_populates="workspace", lazy="selectin")
+    vcs_connection: Mapped[VCSConnection | None] = relationship(back_populates="workspace", uselist=False, lazy="selectin")
+    permissions: Mapped[list[WorkspacePermission]] = relationship(back_populates="workspace", lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<Workspace name={self.name!r} provider={self.provider!r}>"
 
 
 class DriftCheck(Base):
-    """Historical record of a drift detection run for a workspace.
-
-    Columns:
-        id                     — Auto-increment integer primary key.
-        workspace              — Logical workspace name.
-        has_drift              — True if drift was detected.
-        drifted_resources_json — JSON list of drifted resource dicts.
-        error                  — Error message if the check failed.
-        checked_at             — UTC timestamp when the check ran.
-    """
-
+    """Historical record of a drift detection run for a workspace."""
     __tablename__ = "drift_checks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -191,38 +156,362 @@ class DriftCheck(Base):
     drifted_resources_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     error: Mapped[str] = mapped_column(Text, nullable=False, default="")
     checked_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
-        nullable=False,
-        server_default=func.now(),
-        index=True,
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True,
     )
 
     def __repr__(self) -> str:
         return f"<DriftCheck workspace={self.workspace!r} has_drift={self.has_drift}>"
 
 
+# ---------------------------------------------------------------------------
+# Phase 1: State Management
+# ---------------------------------------------------------------------------
+
+
+class StateVersion(Base):
+    """Versioned, encrypted Terraform state stored in PostgreSQL."""
+    __tablename__ = "state_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    serial: Mapped[int] = mapped_column(Integer, nullable=False)
+    lineage: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    state_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False, default="system")
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "serial", name="uq_state_workspace_serial"),
+    )
+
+    # Relationships
+    workspace: Mapped[Workspace] = relationship(back_populates="state_versions")
+
+    def __repr__(self) -> str:
+        return f"<StateVersion workspace_id={self.workspace_id!r} serial={self.serial}>"
+
+
+class StateLock(Base):
+    """Workspace-level mutex for Terraform state operations."""
+    __tablename__ = "state_locks"
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True,
+    )
+    lock_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    holder: Mapped[str] = mapped_column(String(128), nullable=False)
+    operation: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    info: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<StateLock workspace_id={self.workspace_id!r} holder={self.holder!r}>"
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: Organizations, Users, Teams, RBAC
+# ---------------------------------------------------------------------------
+
+
+class Organization(Base):
+    """Top-level org container. Multi-org schema, single-org runtime initially."""
+    __tablename__ = "organizations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    # Relationships
+    teams: Mapped[list[Team]] = relationship(back_populates="organization", lazy="selectin")
+    users: Mapped[list[User]] = relationship(back_populates="organization", lazy="selectin")
+
+    def __repr__(self) -> str:
+        return f"<Organization name={self.name!r}>"
+
+
 class User(Base):
-    """API key authentication record.
-
-    Columns:
-        id           — UUID primary key.
-        name         — Human-readable user/service name.
-        api_key_hash — SHA-256 hex digest of the raw API key.
-        created_at   — UTC timestamp when the user was created.
-    """
-
+    """User with email/password auth. Replaces old API-key-only User model."""
     __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=_new_uuid
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    email: Mapped[str] = mapped_column(String(256), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    org_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True, default=None,
     )
-    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
-    api_key_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
-        nullable=False,
-        server_default=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None,
+    )
+
+    # Relationships
+    organization: Mapped[Organization | None] = relationship(back_populates="users")
+    team_memberships: Mapped[list[TeamMembership]] = relationship(back_populates="user", lazy="selectin")
+    api_tokens: Mapped[list[APIToken]] = relationship(back_populates="user", lazy="selectin")
+
+    def __repr__(self) -> str:
+        return f"<User email={self.email!r} name={self.name!r}>"
+
+
+class Team(Base):
+    """Named team within an organization."""
+    __tablename__ = "teams"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False,
+    )
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", name="uq_team_org_name"),
+    )
+
+    # Relationships
+    organization: Mapped[Organization] = relationship(back_populates="teams")
+    memberships: Mapped[list[TeamMembership]] = relationship(back_populates="team", lazy="selectin")
+    workspace_permissions: Mapped[list[WorkspacePermission]] = relationship(
+        back_populates="team", lazy="selectin",
     )
 
     def __repr__(self) -> str:
-        return f"<User name={self.name!r}>"
+        return f"<Team name={self.name!r} is_admin={self.is_admin}>"
+
+
+class TeamMembership(Base):
+    """Many-to-many link between teams and users."""
+    __tablename__ = "team_memberships"
+
+    team_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True,
+    )
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    # Relationships
+    team: Mapped[Team] = relationship(back_populates="memberships")
+    user: Mapped[User] = relationship(back_populates="team_memberships")
+
+
+class WorkspacePermission(Base):
+    """Team-level permission on a workspace: read | plan | write | admin."""
+    __tablename__ = "workspace_permissions"
+
+    team_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True,
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True,
+    )
+    level: Mapped[str] = mapped_column(String(16), nullable=False, default="read")
+
+    # Relationships
+    team: Mapped[Team] = relationship(back_populates="workspace_permissions")
+    workspace: Mapped[Workspace] = relationship(back_populates="permissions")
+
+    def __repr__(self) -> str:
+        return f"<WorkspacePermission team={self.team_id!r} ws={self.workspace_id!r} level={self.level!r}>"
+
+
+class APIToken(Base):
+    """Long-lived API token for CLI/automation access."""
+    __tablename__ = "api_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None,
+    )
+
+    # Relationships
+    user: Mapped[User] = relationship(back_populates="api_tokens")
+
+    def __repr__(self) -> str:
+        return f"<APIToken name={self.name!r} user_id={self.user_id!r}>"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: VCS Integration
+# ---------------------------------------------------------------------------
+
+
+class VCSConnection(Base):
+    """Links a workspace to a GitHub repository + branch for VCS-driven runs."""
+    __tablename__ = "vcs_connections"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True,
+    )
+    installation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    repo_full_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    branch: Mapped[str] = mapped_column(String(128), nullable=False, default="main")
+    working_directory: Mapped[str] = mapped_column(String(256), nullable=False, default=".")
+    auto_apply: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    created_by: Mapped[str] = mapped_column(String(36), nullable=False)
+
+    # Relationships
+    workspace: Mapped[Workspace] = relationship(back_populates="vcs_connection")
+
+    def __repr__(self) -> str:
+        return f"<VCSConnection repo={self.repo_full_name!r} branch={self.branch!r}>"
+
+
+class WebhookDelivery(Base):
+    """Tracks processed GitHub webhook deliveries for idempotency."""
+    __tablename__ = "webhook_deliveries"
+
+    delivery_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    repo_full_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="processed")
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Policy as Code (OPA)
+# ---------------------------------------------------------------------------
+
+
+class Policy(Base):
+    """Individual OPA policy with Rego source code."""
+    __tablename__ = "policies"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    rego_code: Mapped[str] = mapped_column(Text, nullable=False)
+    enforcement: Mapped[str] = mapped_column(String(16), nullable=False, default="advisory")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+    created_by: Mapped[str] = mapped_column(String(36), nullable=False, default="system")
+
+    def __repr__(self) -> str:
+        return f"<Policy name={self.name!r} enforcement={self.enforcement!r}>"
+
+
+class PolicySet(Base):
+    """Named group of policies assignable to workspaces or org-wide."""
+    __tablename__ = "policy_sets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    scope: Mapped[str] = mapped_column(String(16), nullable=False, default="workspace")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    # Relationships
+    members: Mapped[list[PolicySetMember]] = relationship(back_populates="policy_set", lazy="selectin")
+    assignments: Mapped[list[PolicySetAssignment]] = relationship(
+        back_populates="policy_set", lazy="selectin",
+    )
+
+    def __repr__(self) -> str:
+        return f"<PolicySet name={self.name!r} scope={self.scope!r}>"
+
+
+class PolicySetMember(Base):
+    """Many-to-many: policy belongs to policy set."""
+    __tablename__ = "policy_set_members"
+
+    policy_set_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("policy_sets.id", ondelete="CASCADE"), primary_key=True,
+    )
+    policy_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("policies.id", ondelete="CASCADE"), primary_key=True,
+    )
+
+    # Relationships
+    policy_set: Mapped[PolicySet] = relationship(back_populates="members")
+    policy: Mapped[Policy] = relationship()
+
+
+class PolicySetAssignment(Base):
+    """Assigns a policy set to a workspace (NULL workspace_id = org-wide)."""
+    __tablename__ = "policy_set_assignments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    policy_set_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("policy_sets.id", ondelete="CASCADE"), nullable=False,
+    )
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("policy_set_id", "workspace_id", name="uq_psa_set_workspace"),
+    )
+
+    # Relationships
+    policy_set: Mapped[PolicySet] = relationship(back_populates="assignments")
+
+
+class PolicyCheckResult(Base):
+    """Result of evaluating one policy against one run's plan."""
+    __tablename__ = "policy_check_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    policy_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("policies.id", ondelete="CASCADE"), nullable=False,
+    )
+    policy_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    enforcement: Mapped[str] = mapped_column(String(16), nullable=False)
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    violations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    evaluated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    # Relationships
+    job: Mapped[Job] = relationship(back_populates="policy_results")
+
+    def __repr__(self) -> str:
+        return f"<PolicyCheckResult policy={self.policy_name!r} passed={self.passed}>"

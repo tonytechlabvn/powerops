@@ -3,6 +3,7 @@ WORKDIR /app
 COPY pyproject.toml .
 COPY backend/ backend/
 COPY templates/ templates/
+COPY policies/ policies/
 RUN pip install --no-cache-dir .
 
 FROM node:20-alpine AS frontend
@@ -23,12 +24,12 @@ COPY --from=backend /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 COPY --from=backend /app /app
 COPY --from=frontend /app/dist /app/static
 
-# Install terraform + curl (for healthcheck)
-RUN apt-get update && apt-get install -y --no-install-recommends wget unzip curl \
+# Install terraform + curl (healthcheck) + git (VCS clone)
+RUN apt-get update && apt-get install -y --no-install-recommends wget unzip curl git \
     && wget -q https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_amd64.zip \
     && unzip terraform_1.7.0_linux_amd64.zip -d /usr/local/bin \
     && rm terraform_1.7.0_linux_amd64.zip \
-    && apt-get purge -y wget unzip && apt-get autoremove -y \
+    && apt-get purge -y wget unzip && apt-get autoremove -y --purge \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
