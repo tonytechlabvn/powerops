@@ -37,7 +37,7 @@ export function useSSEStream(jobId: string | null): SSEStreamState {
       esRef.current?.close()
       setStatus('connecting')
 
-      const es = new EventSource(`${BASE_URL}/api/jobs/${jobId}/stream`)
+      const es = new EventSource(`${BASE_URL}/api/stream/${jobId}`)
       esRef.current = es
 
       es.onopen = () => setStatus('streaming')
