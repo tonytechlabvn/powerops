@@ -6,6 +6,7 @@ import { Loader2, ChevronLeft } from 'lucide-react'
 import { useTemplates, useTemplate } from '../../hooks/use-api'
 import { TemplateCard } from './template-card'
 import { TemplateDeployForm } from './template-deploy-form'
+import { AutoDeployPanel } from './auto-deploy-panel'
 
 // --- Detail / deploy view for a single template ---
 function TemplateDetailView({ name }: { name: string }) {
@@ -41,8 +42,11 @@ function TemplateDetailView({ name }: { name: string }) {
         </div>
       </div>
 
+      {/* Auto Deploy — only for AWS EC2 templates */}
+      {template.provider === 'aws' && <AutoDeployPanel />}
+
       <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4">Deploy Configuration</h2>
+        <h2 className="text-sm font-semibold text-zinc-300 mb-4">Manual Deploy</h2>
         <TemplateDeployForm template={template} />
       </div>
     </div>

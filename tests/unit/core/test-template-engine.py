@@ -198,12 +198,13 @@ def test_render_template_produces_valid_hcl(template_dir: Path) -> None:
     assert "aws_security_group" in output
 
 
-def test_render_template_raises_validation_error_on_missing_required(
+def test_render_template_succeeds_with_defaults_only(
     template_dir: Path,
 ) -> None:
+    """All variables now have defaults — rendering with empty dict should work."""
     with _patch_template_root(template_dir):
-        with pytest.raises(ValidationError):
-            te.render_template("aws/ec2-web-server", {})  # key_name is required
+        output = te.render_template("aws/ec2-web-server", {})
+    assert "aws_instance" in output
 
 
 def test_render_template_raises_for_unknown_template(template_dir: Path) -> None:

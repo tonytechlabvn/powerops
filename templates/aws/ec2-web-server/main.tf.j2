@@ -8,12 +8,39 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+{% if auto_key_pair | default(false) %}
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+{% endif %}
   }
 }
 
 provider "aws" {
   region = "{{ aws_region }}"
 }
+
+{% if auto_key_pair | default(false) %}
+# ---------------------------------------------------------------------------
+# Auto-generated SSH key pair
+# ---------------------------------------------------------------------------
+resource "tls_private_key" "ssh" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "generated" {
+  key_name   = "{{ instance_name }}-key"
+  public_key = tls_private_key.ssh.public_key_openssh
+
+  tags = {
+    Name        = "{{ instance_name }}-key"
+    Environment = "{{ environment }}"
+    ManagedBy   = "TerraBot"
+  }
+}
+{% endif %}
 
 # ---------------------------------------------------------------------------
 # Security group — HTTP, HTTPS, and SSH ingress
@@ -66,7 +93,11 @@ resource "aws_security_group" "web" {
 resource "aws_instance" "web" {
   ami                    = "{{ ami_id }}"
   instance_type          = "{{ instance_type }}"
+{% if auto_key_pair | default(false) %}
+  key_name               = aws_key_pair.generated.key_name
+{% else %}
   key_name               = "{{ key_name }}"
+{% endif %}
   vpc_security_group_ids = [aws_security_group.web.id]
 
   root_block_device {
@@ -104,3 +135,16 @@ output "public_dns" {
   description = "Public DNS hostname of the web server"
   value       = aws_instance.web.public_dns
 }
+
+{% if auto_key_pair | default(false) %}
+output "ssh_command" {
+  description = "SSH command to connect to the server"
+  value       = "ssh -i key.pem {{ ssh_user }}@${aws_instance.web.public_ip}"
+}
+
+output "private_key_pem" {
+  description = "SSH private key (save this — it cannot be retrieved again)"
+  value       = tls_private_key.ssh.private_key_pem
+  sensitive   = true
+}
+{% endif %}

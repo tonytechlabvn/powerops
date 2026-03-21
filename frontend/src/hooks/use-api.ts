@@ -134,6 +134,22 @@ export function usePlanMutation() {
   })
 }
 
+export function useAutoDeployMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: {
+      instance_name?: string
+      instance_type?: string
+      os_type?: string
+      environment?: string
+    }) =>
+      apiClient.post<{ job_id: string; workspace: string; stream_url: string }>(
+        '/api/deploy/auto', payload
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+}
+
 export function useApplyMutation() {
   const qc = useQueryClient()
   return useMutation({

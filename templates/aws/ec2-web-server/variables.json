@@ -24,8 +24,23 @@
     {
       "name": "key_name",
       "type": "string",
-      "description": "Name of the EC2 key pair for SSH access.",
-      "required": true
+      "description": "Name of the EC2 key pair for SSH access. Leave empty for auto-generated key.",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "auto_key_pair",
+      "type": "bool",
+      "description": "Auto-generate SSH key pair (used by Auto Deploy mode).",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "ssh_user",
+      "type": "string",
+      "description": "SSH username for the instance (depends on OS).",
+      "default": "ec2-user",
+      "required": false
     },
     {
       "name": "instance_name",
