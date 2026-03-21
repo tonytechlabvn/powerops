@@ -147,14 +147,15 @@ def create_app() -> FastAPI:
     # Serve frontend static files in production (built React app at /app/static)
     static_dir = Path(__file__).parent.parent.parent / "static"
     if static_dir.is_dir():
-        app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
 
         @app.get("/{full_path:path}", include_in_schema=False)
         async def serve_spa(full_path: str):
             """Serve React SPA for all non-API routes."""
+            # Serve actual files (JS, CSS, images, etc.)
             file_path = static_dir / full_path
-            if file_path.is_file():
+            if file_path.is_file() and static_dir in file_path.resolve().parents:
                 return FileResponse(file_path)
+            # All other routes get index.html (React Router handles them)
             return FileResponse(static_dir / "index.html")
 
     return app
