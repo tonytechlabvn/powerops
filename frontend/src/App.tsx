@@ -16,7 +16,7 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="templates" element={<TemplateBrowserPage />} />
-          <Route path="templates/:name" element={<TemplateBrowserPage />} />
+          <Route path="templates/:provider/:tplName" element={<TemplateBrowserPage />} />
           <Route path="jobs" element={<JobMonitorPage />} />
           <Route path="jobs/:id" element={<JobMonitorPage />} />
           <Route path="jobs/:id/plan" element={<PlanViewerPage />} />

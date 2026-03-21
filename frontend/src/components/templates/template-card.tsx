@@ -50,7 +50,7 @@ export function TemplateCard({ template }: TemplateCardProps) {
           <span className="text-xs text-zinc-600">No cost estimate</span>
         )}
         <Link
-          to={`/templates/${template.name}`}
+          to={`/templates/${template.name}`}  /* name is already "aws/ec2-web-server" format */
           className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
         >
           Deploy →

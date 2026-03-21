@@ -119,6 +119,7 @@ function TemplateBrowserGrid() {
 
 // --- Page entry point — routes between list and detail ---
 export function TemplateBrowserPage() {
-  const { name } = useParams<{ name?: string }>()
-  return name ? <TemplateDetailView name={name} /> : <TemplateBrowserGrid />
+  const { provider, tplName } = useParams<{ provider?: string; tplName?: string }>()
+  const fullName = provider && tplName ? `${provider}/${tplName}` : undefined
+  return fullName ? <TemplateDetailView name={fullName} /> : <TemplateBrowserGrid />
 }
