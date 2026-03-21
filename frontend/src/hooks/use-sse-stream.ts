@@ -1,4 +1,5 @@
-// SSE (Server-Sent Events) hook for streaming Terraform job output
+// SSE streaming hook using fetch + ReadableStream (more reliable than EventSource
+// across Cloudflare Tunnel, proxies, and HTTP/2 connections)
 
 import { useState, useEffect, useRef } from 'react'
 
@@ -11,15 +12,29 @@ export interface SSEStreamState {
 }
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
-const MAX_RECONNECT_ATTEMPTS = 3
-const RECONNECT_DELAY_MS = 2000
+
+// Parse SSE text chunk into individual events
+function parseSSEEvents(text: string): Array<{ event?: string; data?: string }> {
+  const events: Array<{ event?: string; data?: string }> = []
+  const blocks = text.split('\n\n')
+  for (const block of blocks) {
+    if (!block.trim()) continue
+    let event: string | undefined
+    let data: string | undefined
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event: ')) event = line.slice(7)
+      else if (line.startsWith('data: ')) data = line.slice(6)
+    }
+    if (data !== undefined) events.push({ event, data })
+  }
+  return events
+}
 
 export function useSSEStream(jobId: string | null): SSEStreamState {
   const [lines, setLines] = useState<string[]>([])
   const [status, setStatus] = useState<StreamStatus>('idle')
   const [error, setError] = useState<string | null>(null)
-  const esRef = useRef<EventSource | null>(null)
-  const attemptsRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!jobId) {
@@ -31,69 +46,75 @@ export function useSSEStream(jobId: string | null): SSEStreamState {
 
     setLines([])
     setError(null)
-    attemptsRef.current = 0
 
-    function connect() {
-      esRef.current?.close()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    async function streamFetch() {
       setStatus('connecting')
+      try {
+        const res = await fetch(`${BASE_URL}/api/stream/${jobId}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'text/event-stream' },
+        })
 
-      const es = new EventSource(`${BASE_URL}/api/stream/${jobId}`)
-      esRef.current = es
-
-      es.onopen = () => setStatus('streaming')
-
-      // Log lines from 'log' events
-      es.addEventListener('log', (e: MessageEvent) => {
-        setLines(prev => [...prev, e.data])
-      })
-
-      // Status updates
-      es.addEventListener('status', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data) as { status: string }
-          if (data.status === 'completed' || data.status === 'failed') {
-            setStatus('completed')
-            es.close()
-          }
-        } catch {
-          // Ignore malformed status events
-        }
-      })
-
-      // Final result payload
-      es.addEventListener('result', (e: MessageEvent) => {
-        setLines(prev => [...prev, `[result] ${e.data}`])
-        setStatus('completed')
-        es.close()
-      })
-
-      // Error from server (custom event, not connection error)
-      es.addEventListener('error', (e: MessageEvent) => {
-        if (!e.data) return // ignore connection-level errors (handled by onerror)
-        setLines(prev => [...prev, `[error] ${e.data}`])
-        setStatus('error')
-        setError(e.data)
-        es.close()
-      })
-
-      // Connection-level error — attempt reconnect
-      es.onerror = () => {
-        es.close()
-        if (attemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-          attemptsRef.current += 1
-          setTimeout(connect, RECONNECT_DELAY_MS)
-        } else {
+        if (!res.ok || !res.body) {
           setStatus('error')
-          setError('Connection lost. Max reconnection attempts reached.')
+          setError(`Stream request failed: ${res.status}`)
+          return
         }
+
+        setStatus('streaming')
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+
+          // Process complete SSE events (separated by double newline)
+          const lastDoubleNewline = buffer.lastIndexOf('\n\n')
+          if (lastDoubleNewline === -1) continue
+
+          const complete = buffer.slice(0, lastDoubleNewline + 2)
+          buffer = buffer.slice(lastDoubleNewline + 2)
+
+          const events = parseSSEEvents(complete)
+          for (const evt of events) {
+            if (evt.event === 'log' && evt.data) {
+              setLines(prev => [...prev, evt.data!])
+            } else if (evt.event === 'result') {
+              setStatus('completed')
+              reader.cancel()
+              return
+            } else if (evt.event === 'error' && evt.data) {
+              setLines(prev => [...prev, `[error] ${evt.data}`])
+              setStatus('error')
+              setError(evt.data!)
+              reader.cancel()
+              return
+            }
+            // ignore 'ping' keepalive events
+          }
+        }
+
+        // Stream ended normally
+        setStatus('completed')
+      } catch (err) {
+        if (controller.signal.aborted) return // cleanup, not an error
+        setStatus('error')
+        setError(err instanceof Error ? err.message : 'Stream connection failed')
       }
     }
 
-    connect()
+    streamFetch()
 
     return () => {
-      esRef.current?.close()
-      esRef.current = null
+      controller.abort()
+      abortRef.current = null
     }
   }, [jobId])
 
