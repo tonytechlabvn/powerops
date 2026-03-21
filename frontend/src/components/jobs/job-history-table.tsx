@@ -41,6 +41,13 @@ export function JobHistoryTable({ jobs }: JobHistoryTableProps) {
     }
   }
 
+  // Workspaces that already have a destroy job (completed/running/pending)
+  const destroyedWorkspaces = new Set(
+    jobs
+      .filter(j => j.type === 'destroy' && j.status !== 'failed' && j.status !== 'cancelled')
+      .map(j => j.workspace)
+  )
+
   const sorted = [...jobs].sort((a, b) => {
     const av = getJobSortValue(a, sortKey)
     const bv = getJobSortValue(b, sortKey)
@@ -105,7 +112,7 @@ export function JobHistoryTable({ jobs }: JobHistoryTableProps) {
                 >
                   View
                 </Link>
-                {job.status === 'completed' && job.type === 'apply' && (
+                {job.status === 'completed' && job.type === 'apply' && !destroyedWorkspaces.has(job.workspace) && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation()

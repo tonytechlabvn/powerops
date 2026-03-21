@@ -12,13 +12,17 @@ import { statusColor, formatDate } from '../../lib/utils'
 // --- Individual job detail view ---
 function JobDetailView({ id }: { id: string }) {
   const { data: job, isLoading, error } = useJob(id)
+  const { data: allJobs } = useJobs()
   const isLive = job?.status === 'running' || job?.status === 'pending'
   const navigate = useNavigate()
   const destroyMutation = useDestroyMutation()
   const [showDestroyConfirm, setShowDestroyConfirm] = useState(false)
 
-  // Show destroy option for completed apply jobs (infrastructure exists)
-  const canDestroy = job?.status === 'completed' && job?.type === 'apply'
+  // Show destroy option only for completed apply jobs with no existing destroy job
+  const alreadyDestroyed = (allJobs ?? []).some(
+    j => j.type === 'destroy' && j.status !== 'failed' && j.status !== 'cancelled' && j.workspace === job?.workspace
+  )
+  const canDestroy = job?.status === 'completed' && job?.type === 'apply' && !alreadyDestroyed
 
   function handleDestroy() {
     if (!job) return
