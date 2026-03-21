@@ -65,9 +65,10 @@ async def _resolve_workspace_id(name: str) -> str:
             select(Workspace).where(Workspace.name == name)
         )
         ws = result.scalar_one_or_none()
-    if ws is None:
-        raise HTTPException(status_code=404, detail=f"Workspace '{name}' not found.")
-    return ws.id
+        if ws is None:
+            raise HTTPException(status_code=404, detail=f"Workspace '{name}' not found.")
+        ws_id = ws.id
+    return ws_id
 
 
 # ---------------------------------------------------------------------------

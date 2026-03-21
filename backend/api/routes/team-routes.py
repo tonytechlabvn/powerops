@@ -67,7 +67,8 @@ async def list_teams(request: Request):
     _require_auth(request)
     async with get_session() as session:
         teams = (await session.execute(sa_select(Team).order_by(Team.created_at))).scalars().all()
-    return [_team_to_response(t) for t in teams]
+        result = [_team_to_response(t) for t in teams]
+    return result
 
 
 @router.post("", response_model=_schemas.TeamResponse, status_code=201)

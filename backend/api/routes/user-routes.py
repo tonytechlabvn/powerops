@@ -16,9 +16,10 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select as sa_select
+from sqlalchemy.orm import selectinload
 
 from backend.db.database import get_session
-from backend.db.models import User
+from backend.db.models import TeamMembership, User
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +103,13 @@ async def list_users(request: Request):
     """List all users in the organisation."""
     _require_admin(request)
     async with get_session() as session:
-        users = (await session.execute(sa_select(User).order_by(User.created_at))).scalars().all()
-    return [_user_to_response(u) for u in users]
+        users = (await session.execute(
+            sa_select(User)
+            .options(selectinload(User.team_memberships).selectinload(TeamMembership.team))
+            .order_by(User.created_at)
+        )).scalars().all()
+        result = [_user_to_response(u) for u in users]
+    return result
 
 
 @router.post("", response_model=_schemas.UserResponse, status_code=201)
@@ -143,6 +149,7 @@ async def update_user(user_id: str, body: UpdateUserRequest, request: Request):
     async with get_session() as session:
         user = (await session.execute(
             sa_select(User).where(User.id == user_id)
+            .options(selectinload(User.team_memberships).selectinload(TeamMembership.team))
         )).scalar_one_or_none()
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")

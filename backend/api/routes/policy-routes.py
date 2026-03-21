@@ -96,8 +96,9 @@ async def list_policies() -> list[dict]:
     async with get_session() as session:
         result = await session.execute(select(Policy).order_by(Policy.name))
         policies = result.scalars().all()
-    s = _schemas()
-    return [s.PolicyResponse.model_validate(p).model_dump() for p in policies]
+        s = _schemas()
+        response = [s.PolicyResponse.model_validate(p).model_dump() for p in policies]
+    return response
 
 
 @router.post("/policies", status_code=201)
@@ -138,10 +139,11 @@ async def get_policy(policy_id: str) -> dict:
     """Return policy detail by ID."""
     async with get_session() as session:
         policy = await session.get(Policy, policy_id)
-    if policy is None:
-        raise HTTPException(404, "Policy not found")
-    s = _schemas()
-    return s.PolicyResponse.model_validate(policy).model_dump()
+        if policy is None:
+            raise HTTPException(404, "Policy not found")
+        s = _schemas()
+        response = s.PolicyResponse.model_validate(policy).model_dump()
+    return response
 
 
 @router.put("/policies/{policy_id}")
@@ -253,19 +255,19 @@ async def list_policy_sets() -> list[dict]:
         )
         sets = result.scalars().all()
 
-    s = _schemas()
-    out = []
-    for ps in sets:
-        out.append(
-            s.PolicySetResponse(
-                id=ps.id,
-                name=ps.name,
-                description=ps.description,
-                scope=ps.scope,
-                policy_count=len(ps.members),
-                created_at=ps.created_at,
-            ).model_dump()
-        )
+        s = _schemas()
+        out = []
+        for ps in sets:
+            out.append(
+                s.PolicySetResponse(
+                    id=ps.id,
+                    name=ps.name,
+                    description=ps.description,
+                    scope=ps.scope,
+                    policy_count=len(ps.members),
+                    created_at=ps.created_at,
+                ).model_dump()
+            )
     return out
 
 
@@ -449,18 +451,18 @@ async def get_job_policy_results(job_id: str) -> list[dict]:
         )
         records = result.scalars().all()
 
-    s = _schemas()
-    out = []
-    for r in records:
-        violations = json.loads(r.violations_json) if r.violations_json else []
-        out.append(
-            s.PolicyCheckResultResponse(
-                id=r.id,
-                policy_name=r.policy_name,
-                enforcement=r.enforcement,
-                passed=r.passed,
-                violations=violations,
-                evaluated_at=r.evaluated_at,
-            ).model_dump()
-        )
+        s = _schemas()
+        out = []
+        for r in records:
+            violations = json.loads(r.violations_json) if r.violations_json else []
+            out.append(
+                s.PolicyCheckResultResponse(
+                    id=r.id,
+                    policy_name=r.policy_name,
+                    enforcement=r.enforcement,
+                    passed=r.passed,
+                    violations=violations,
+                    evaluated_at=r.evaluated_at,
+                ).model_dump()
+            )
     return out

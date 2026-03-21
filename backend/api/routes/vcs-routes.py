@@ -38,21 +38,20 @@ def _load_schemas():
 # Helpers
 # ---------------------------------------------------------------------------
 
-async def _get_workspace_or_404(workspace_id: str):
-    async with get_session() as session:
-        ws = await session.get(Workspace, workspace_id)
+async def _assert_workspace_exists(workspace_id: str, session) -> None:
+    """Raise 404 if workspace does not exist. Must be called inside a session."""
+    ws = await session.get(Workspace, workspace_id)
     if not ws:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    return ws
 
 
-async def _get_vcs_conn_or_404(workspace_id: str):
-    async with get_session() as session:
-        stmt = select(VCSConnection).where(
-            VCSConnection.workspace_id == workspace_id
-        )
-        result = await session.execute(stmt)
-        conn = result.scalar_one_or_none()
+async def _get_vcs_conn_or_404(workspace_id: str, session) -> VCSConnection:
+    """Return VCS connection or raise 404. Must be called inside a session."""
+    stmt = select(VCSConnection).where(
+        VCSConnection.workspace_id == workspace_id
+    )
+    result = await session.execute(stmt)
+    conn = result.scalar_one_or_none()
     if not conn:
         raise HTTPException(status_code=404, detail="No VCS connection for this workspace")
     return conn
@@ -68,10 +67,10 @@ async def connect_vcs(workspace_id: str, body: dict):
     schemas = _load_schemas()
     req = schemas.VCSConnectRequest(**body)
 
-    # Verify workspace exists
-    await _get_workspace_or_404(workspace_id)
-
     async with get_session() as session:
+        # Verify workspace exists
+        await _assert_workspace_exists(workspace_id, session)
+
         # Prevent duplicate connections
         existing = await session.execute(
             select(VCSConnection).where(VCSConnection.workspace_id == workspace_id)
@@ -93,15 +92,18 @@ async def connect_vcs(workspace_id: str, body: dict):
         session.add(conn)
         await session.flush()
         await session.refresh(conn)
-        return schemas.VCSConnectionResponse.model_validate(conn)
+        result = schemas.VCSConnectionResponse.model_validate(conn)
+    return result
 
 
 @router.get("/workspaces/{workspace_id}/vcs")
 async def get_vcs_connection(workspace_id: str):
     """Return the current VCS connection for a workspace."""
     schemas = _load_schemas()
-    conn = await _get_vcs_conn_or_404(workspace_id)
-    return schemas.VCSConnectionResponse.model_validate(conn)
+    async with get_session() as session:
+        conn = await _get_vcs_conn_or_404(workspace_id, session)
+        result = schemas.VCSConnectionResponse.model_validate(conn)
+    return result
 
 
 @router.patch("/workspaces/{workspace_id}/vcs")

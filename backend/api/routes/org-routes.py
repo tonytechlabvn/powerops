@@ -70,9 +70,10 @@ async def get_org(request: Request):
     _require_auth(request)
     async with get_session() as session:
         org = (await session.execute(sa_select(Organization))).scalar_one_or_none()
-    if org is None:
-        raise HTTPException(status_code=404, detail="No organisation found")
-    return {"id": org.id, "name": org.name, "created_at": org.created_at}
+        if org is None:
+            raise HTTPException(status_code=404, detail="No organisation found")
+        result = {"id": org.id, "name": org.name, "created_at": org.created_at}
+    return result
 
 
 @router.get("/tokens", response_model=list[_schemas.APITokenResponse])
@@ -85,16 +86,17 @@ async def list_tokens(request: Request):
             .where(APIToken.user_id == user_id)
             .order_by(APIToken.created_at.desc())
         )).scalars().all()
-    return [
-        _schemas.APITokenResponse(
-            id=t.id,
-            name=t.name,
-            created_at=t.created_at,
-            last_used_at=t.last_used_at,
-            revoked_at=t.revoked_at,
-        )
-        for t in tokens
-    ]
+        result = [
+            _schemas.APITokenResponse(
+                id=t.id,
+                name=t.name,
+                created_at=t.created_at,
+                last_used_at=t.last_used_at,
+                revoked_at=t.revoked_at,
+            )
+            for t in tokens
+        ]
+    return result
 
 
 @router.post("/tokens", response_model=_schemas.APITokenCreatedResponse, status_code=201)
