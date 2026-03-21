@@ -175,19 +175,19 @@ async def me(request: Request):
         user = (await session.execute(
             sa_select(User).where(User.id == user_id)
         )).scalar_one_or_none()
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
 
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    team_names = [m.team.name for m in user.team_memberships if m.team]
-    return _schemas.UserResponse(
-        id=user.id,
-        email=user.email,
-        name=user.name,
-        is_active=user.is_active,
-        created_at=user.created_at,
-        teams=team_names,
-    )
+        # Eagerly load teams within session to avoid DetachedInstanceError
+        team_names = [m.team.name for m in user.team_memberships if m.team]
+        return _schemas.UserResponse(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            teams=team_names,
+        )
 
 
 # ---------------------------------------------------------------------------
