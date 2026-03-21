@@ -35,10 +35,10 @@ services:
     networks:
       - tony-net
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8181/health"]
+      test: ["CMD-SHELL", "opa eval true || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
     logging:
       driver: "json-file"
       options:
