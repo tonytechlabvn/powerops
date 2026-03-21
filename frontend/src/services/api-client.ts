@@ -1,8 +1,19 @@
-// Typed fetch wrapper for TerraBot backend API
+// Typed fetch wrapper for PowerOps backend API with JWT auth support
 
 import type { ApiError } from '../types/api-types'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
+
+// In-memory token store (not localStorage — XSS protection)
+let _accessToken: string | null = null
+
+export function setAccessToken(token: string | null) {
+  _accessToken = token
+}
+
+export function getAccessToken(): string | null {
+  return _accessToken
+}
 
 class ApiClientError extends Error {
   status: number
@@ -16,6 +27,14 @@ class ApiClientError extends Error {
   }
 }
 
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (_accessToken) {
+    headers['Authorization'] = `Bearer ${_accessToken}`
+  }
+  return headers
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = `HTTP ${res.status}: ${res.statusText}`
@@ -25,11 +44,10 @@ async function handleResponse<T>(res: Response): Promise<T> {
       message = body.detail || body.message || message
       detail = body.detail
     } catch {
-      // Response body not JSON — use default message
+      // Response body not JSON
     }
     throw new ApiClientError({ message, status: res.status, detail })
   }
-  // Handle empty responses (e.g. 204 No Content)
   const text = await res.text()
   if (!text) return undefined as T
   return JSON.parse(text) as T
@@ -48,7 +66,8 @@ function buildUrl(path: string, params?: Record<string, string | undefined>): st
 export const apiClient = {
   async get<T>(path: string, params?: Record<string, string | undefined>): Promise<T> {
     const res = await fetch(buildUrl(path, params), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
+      credentials: 'include',
     })
     return handleResponse<T>(res)
   },
@@ -56,7 +75,18 @@ export const apiClient = {
   async post<T>(path: string, body?: unknown): Promise<T> {
     const res = await fetch(`${BASE_URL}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
+      credentials: 'include',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+    return handleResponse<T>(res)
+  },
+
+  async put<T>(path: string, body?: unknown): Promise<T> {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      credentials: 'include',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
     return handleResponse<T>(res)
@@ -65,7 +95,8 @@ export const apiClient = {
   async patch<T>(path: string, body?: unknown): Promise<T> {
     const res = await fetch(`${BASE_URL}${path}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
+      credentials: 'include',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
     return handleResponse<T>(res)
@@ -74,7 +105,8 @@ export const apiClient = {
   async del<T>(path: string): Promise<T> {
     const res = await fetch(`${BASE_URL}${path}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
+      credentials: 'include',
     })
     return handleResponse<T>(res)
   },
