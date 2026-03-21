@@ -5,6 +5,7 @@ import { ChevronLeft, Loader2 } from 'lucide-react'
 import { useJobs, useJob } from '../../hooks/use-api'
 import { JobOutputStream } from './job-output-stream'
 import { JobHistoryTable } from './job-history-table'
+import { JobOutputSummary } from './job-output-summary'
 import { statusColor, formatDate } from '../../lib/utils'
 
 // --- Individual job detail view ---
@@ -51,6 +52,9 @@ function JobDetailView({ id }: { id: string }) {
           <JobOutputStream jobId={job.id} />
         </div>
       )}
+
+      {/* Deployment result summary (outputs, IPs, etc.) */}
+      {!isLive && <JobOutputSummary job={job} />}
 
       {/* Static output for completed jobs */}
       {!isLive && job.output && (

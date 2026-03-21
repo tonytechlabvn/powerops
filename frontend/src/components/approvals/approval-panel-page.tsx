@@ -25,7 +25,8 @@ function ApprovalRow({ approval }: ApprovalRowProps) {
     try {
       await decisionMutation.mutateAsync({ id: approval.id, approved, reason: reason || undefined })
     } catch (err) {
-      setRowError(err instanceof Error ? err.message : 'Decision failed')
+      const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Decision failed'
+      setRowError(msg)
     }
   }
 
