@@ -171,12 +171,26 @@ export function useRenderTemplate() {
   })
 }
 
+export function useProviderConfig(provider: string) {
+  return useQuery({
+    queryKey: ['providerConfig', provider],
+    queryFn: () =>
+      apiClient.get<{ provider: string; configured: boolean; credentials_redacted: Record<string, string> }>(
+        '/api/config/provider', { provider }
+      ),
+  })
+}
+
 export function useSaveProviderConfig() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: (config: ProviderConfig) =>
       apiClient.post<{ ok: boolean }>('/api/config/provider', {
         provider: config.provider,
         credentials: config.config,
       }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['providerConfig', variables.provider] })
+    },
   })
 }
