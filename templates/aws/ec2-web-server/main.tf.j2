@@ -46,8 +46,12 @@ resource "aws_key_pair" "generated" {
 # Security group — HTTP, HTTPS, and SSH ingress
 # ---------------------------------------------------------------------------
 resource "aws_security_group" "web" {
-  name        = "{{ instance_name }}-sg"
+  name_prefix = "{{ instance_name }}-sg-"
   description = "Security group for {{ instance_name }} web server"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   ingress {
     description = "HTTP"
