@@ -168,8 +168,11 @@ def create_app() -> FastAPI:
             file_path = static_dir / full_path
             if file_path.is_file() and static_dir in file_path.resolve().parents:
                 return FileResponse(file_path)
-            # All other routes get index.html (React Router handles them)
-            return FileResponse(static_dir / "index.html")
+            # index.html: no-cache so browser always gets latest bundle references
+            return FileResponse(
+                static_dir / "index.html",
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+            )
 
     return app
 
