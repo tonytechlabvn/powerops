@@ -34,8 +34,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
 
-        # Allow public paths through without auth
+        # Allow public paths and frontend routes through without auth
         if path in _PUBLIC_PATHS or any(path.startswith(p) for p in _PUBLIC_PATHS):
+            return await call_next(request)
+        # Skip auth for non-API paths (frontend SPA, static assets)
+        if not path.startswith("/api/"):
+            return await call_next(request)
+
+        # If no users exist in DB, skip auth entirely (MVP bootstrap mode)
+        if await _no_users_exist():
             return await call_next(request)
 
         api_key = request.headers.get("X-API-Key", "").strip()
@@ -74,6 +81,20 @@ async def _lookup_user(api_key: str):
     except Exception as exc:
         logger.error("Auth lookup failed: %s", exc)
         return None
+
+
+async def _no_users_exist() -> bool:
+    """Return True if the User table is empty (bootstrap mode)."""
+    try:
+        from backend.db.database import get_session
+        from backend.db.models import User
+        from sqlalchemy import func, select as sa_select
+
+        async with get_session() as session:
+            count = (await session.execute(sa_select(func.count(User.id)))).scalar()
+            return count == 0
+    except Exception:
+        return True  # If DB not ready, skip auth
 
 
 def hash_api_key(api_key: str) -> str:
