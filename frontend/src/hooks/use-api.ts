@@ -103,7 +103,7 @@ export function usePlanMutation() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (payload: { template: string; variables: Record<string, unknown> }) =>
-      apiClient.post<Job>('/api/plan', payload),
+      apiClient.post<{ job_id: string; workspace: string; stream_url: string }>('/api/deploy', payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   })
 }

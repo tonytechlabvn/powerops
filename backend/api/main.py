@@ -72,6 +72,9 @@ _drift_routes     = _load("routes/drift-routes.py",     "routes.drift_routes")
 _workspace_routes = _load("routes/workspace-routes.py", "routes.workspace_routes")
 _import_routes    = _load("routes/import-routes.py",    "routes.import_routes")
 
+# Deploy route (template → workspace → init → plan)
+_deploy_routes    = _load("routes/deploy-routes.py",    "routes.deploy_routes")
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -143,6 +146,9 @@ def create_app() -> FastAPI:
     app.include_router(_drift_routes.router)
     app.include_router(_workspace_routes.router)
     app.include_router(_import_routes.router)
+
+    # Deploy route
+    app.include_router(_deploy_routes.router)
 
     # Serve frontend static files in production (built React app at /app/static)
     static_dir = Path(__file__).parent.parent.parent / "static"

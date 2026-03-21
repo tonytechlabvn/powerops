@@ -76,13 +76,14 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
     }
 
     try {
-      const job = await planMutation.mutateAsync({
+      const result = await planMutation.mutateAsync({
         template: template.name,
         variables: values,
       })
-      navigate(`/jobs/${job.id}`)
+      navigate(`/jobs/${result.job_id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start plan')
+      const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Failed to start deployment'
+      setError(msg)
     }
   }
 
@@ -121,7 +122,7 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
         className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium px-4 py-2 rounded transition-colors"
       >
         {planMutation.isPending && <Loader2 size={14} className="animate-spin" />}
-        Run Plan
+        {planMutation.isPending ? 'Deploying...' : 'Deploy & Plan'}
       </button>
     </form>
   )
