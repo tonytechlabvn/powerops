@@ -24,8 +24,10 @@ export const queryKeys = {
 export function useTemplates(provider?: string) {
   return useQuery({
     queryKey: queryKeys.templates(provider),
-    queryFn: () =>
-      apiClient.get<Template[]>('/api/templates', provider ? { provider } : undefined),
+    queryFn: async () => {
+      const res = await apiClient.get<{ templates: Template[] }>('/api/templates', provider ? { provider } : undefined)
+      return res.templates ?? []
+    },
   })
 }
 
@@ -40,8 +42,10 @@ export function useTemplate(name: string) {
 export function useJobs(status?: string) {
   return useQuery({
     queryKey: queryKeys.jobs(status),
-    queryFn: () =>
-      apiClient.get<Job[]>('/api/jobs', status ? { status } : undefined),
+    queryFn: async () => {
+      const res = await apiClient.get<{ jobs: Job[] }>('/api/jobs', status ? { status } : undefined)
+      return res.jobs ?? []
+    },
     refetchInterval: 5000,
   })
 }
@@ -58,7 +62,10 @@ export function useJob(id: string) {
 export function useApprovals() {
   return useQuery({
     queryKey: queryKeys.approvals(),
-    queryFn: () => apiClient.get<Approval[]>('/api/approvals'),
+    queryFn: async () => {
+      const res = await apiClient.get<{ approvals: Approval[] }>('/api/approvals')
+      return res.approvals ?? []
+    },
     refetchInterval: 5000,
   })
 }
