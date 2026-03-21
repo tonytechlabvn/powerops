@@ -91,12 +91,26 @@ export function useJob(id: string) {
   })
 }
 
+// Map API approval shape to frontend Approval type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapApproval(raw: any): Approval {
+  const ps = raw.plan_summary
+  // API may return [] or null or an object — normalize to PlanSummary | null
+  const planSummary = ps && typeof ps === 'object' && !Array.isArray(ps) && 'adds' in ps
+    ? ps
+    : null
+  return {
+    ...raw,
+    plan_summary: planSummary,
+  }
+}
+
 export function useApprovals() {
   return useQuery({
     queryKey: queryKeys.approvals(),
     queryFn: async () => {
-      const res = await apiClient.get<{ approvals: Approval[] }>('/api/approvals')
-      return res.approvals ?? []
+      const res = await apiClient.get<{ approvals: any[] }>('/api/approvals')
+      return (res.approvals ?? []).map(mapApproval)
     },
     refetchInterval: 5000,
   })
