@@ -1,9 +1,10 @@
 // Sortable table of past Terraform jobs
 
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ChevronUp, ChevronDown, Trash2, Loader2 } from 'lucide-react'
 import type { Job } from '../../types/api-types'
+import { useDestroyMutation } from '../../hooks/use-api'
 import { statusColor, formatDate, formatRelative } from '../../lib/utils'
 
 type SortKey = 'created_at' | 'status' | 'type' | 'workspace'
@@ -27,6 +28,9 @@ function getJobSortValue(job: Job, key: SortKey): string {
 export function JobHistoryTable({ jobs }: JobHistoryTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [destroyingWorkspace, setDestroyingWorkspace] = useState<string | null>(null)
+  const navigate = useNavigate()
+  const destroyMutation = useDestroyMutation()
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -94,13 +98,42 @@ export function JobHistoryTable({ jobs }: JobHistoryTableProps) {
               <td className="px-4 py-3 text-zinc-500 text-xs whitespace-nowrap">
                 {job.completed_at ? formatRelative(job.completed_at) : '—'}
               </td>
-              <td className="px-4 py-3 text-right">
+              <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
                 <Link
                   to={`/jobs/${job.id}`}
                   className="text-xs text-blue-400 hover:text-blue-300"
                 >
                   View
                 </Link>
+                {job.status === 'completed' && job.type === 'apply' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (destroyingWorkspace === job.workspace) {
+                        destroyMutation.mutate(job.workspace, {
+                          onSuccess: (data) => {
+                            setDestroyingWorkspace(null)
+                            navigate(`/jobs/${data.job_id}`)
+                          },
+                        })
+                      } else {
+                        setDestroyingWorkspace(job.workspace)
+                      }
+                    }}
+                    disabled={destroyMutation.isPending}
+                    className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded border transition-colors ${
+                      destroyingWorkspace === job.workspace
+                        ? 'border-red-500/50 bg-red-600 text-white hover:bg-red-500'
+                        : 'border-red-500/30 text-red-400 hover:bg-red-500/20 hover:text-red-300'
+                    }`}
+                    title={destroyingWorkspace === job.workspace ? 'Click again to confirm' : 'Destroy resources'}
+                  >
+                    {destroyMutation.isPending && destroyingWorkspace === job.workspace
+                      ? <Loader2 size={12} className="animate-spin" />
+                      : <Trash2 size={12} />}
+                    {destroyingWorkspace === job.workspace ? 'Confirm' : 'Destroy'}
+                  </button>
+                )}
               </td>
             </tr>
           ))}

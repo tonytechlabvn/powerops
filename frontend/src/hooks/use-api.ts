@@ -163,7 +163,10 @@ export function useDestroyMutation() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (workspace: string) =>
-      apiClient.post<Job>('/api/destroy', { workspace }),
+      apiClient.post<{ job_id: string }>('/api/terraform/destroy', {
+        workspace,
+        confirmation: 'destroy',
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   })
 }

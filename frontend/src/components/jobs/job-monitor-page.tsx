@@ -1,8 +1,9 @@
 // Job monitor page: history table + per-job detail with live output stream
 
-import { useParams, Link } from 'react-router-dom'
-import { ChevronLeft, Loader2 } from 'lucide-react'
-import { useJobs, useJob } from '../../hooks/use-api'
+import { useState } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { ChevronLeft, Loader2, Trash2 } from 'lucide-react'
+import { useJobs, useJob, useDestroyMutation } from '../../hooks/use-api'
 import { JobOutputStream } from './job-output-stream'
 import { JobHistoryTable } from './job-history-table'
 import { JobOutputSummary } from './job-output-summary'
@@ -12,6 +13,22 @@ import { statusColor, formatDate } from '../../lib/utils'
 function JobDetailView({ id }: { id: string }) {
   const { data: job, isLoading, error } = useJob(id)
   const isLive = job?.status === 'running' || job?.status === 'pending'
+  const navigate = useNavigate()
+  const destroyMutation = useDestroyMutation()
+  const [showDestroyConfirm, setShowDestroyConfirm] = useState(false)
+
+  // Show destroy option for completed apply jobs (infrastructure exists)
+  const canDestroy = job?.status === 'completed' && job?.type === 'apply'
+
+  function handleDestroy() {
+    if (!job) return
+    destroyMutation.mutate(job.workspace, {
+      onSuccess: (data) => {
+        setShowDestroyConfirm(false)
+        navigate(`/jobs/${data.job_id}`)
+      },
+    })
+  }
 
   if (isLoading) {
     return (
@@ -43,7 +60,50 @@ function JobDetailView({ id }: { id: string }) {
             <span className="text-xs text-zinc-500">{formatDate(job.created_at)}</span>
           </div>
         </div>
+        {canDestroy && (
+          <button
+            onClick={() => setShowDestroyConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors"
+          >
+            <Trash2 size={14} />
+            Destroy
+          </button>
+        )}
       </div>
+
+      {/* Destroy confirmation */}
+      {showDestroyConfirm && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 space-y-3">
+          <p className="text-sm text-red-300 font-medium">
+            Are you sure you want to destroy all resources in <span className="font-mono">{job.workspace}</span>?
+          </p>
+          <p className="text-xs text-zinc-400">
+            This will permanently destroy all infrastructure managed by this workspace. This action cannot be undone.
+          </p>
+          {destroyMutation.isError && (
+            <p className="text-xs text-red-400">
+              Error: {(destroyMutation.error as Error)?.message ?? 'Failed to start destroy'}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDestroy}
+              disabled={destroyMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 transition-colors"
+            >
+              {destroyMutation.isPending && <Loader2 size={12} className="animate-spin" />}
+              Confirm Destroy
+            </button>
+            <button
+              onClick={() => setShowDestroyConfirm(false)}
+              disabled={destroyMutation.isPending}
+              className="px-3 py-1.5 text-xs font-medium rounded border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Live stream for active jobs */}
       {isLive && (
