@@ -9,7 +9,6 @@ import {
   Settings,
   Database,
   Shield,
-  GitBranch,
   Users,
   LogOut,
 } from 'lucide-react'
