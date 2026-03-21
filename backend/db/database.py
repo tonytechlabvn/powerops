@@ -46,6 +46,18 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     return _session_factory
 
 
+def _migrate_jobs_is_hidden(connection) -> None:
+    """Add is_hidden column to jobs table if it doesn't exist (no Alembic)."""
+    from sqlalchemy import inspect, text
+    inspector = inspect(connection)
+    columns = [c["name"] for c in inspector.get_columns("jobs")]
+    if "is_hidden" not in columns:
+        connection.execute(
+            text("ALTER TABLE jobs ADD COLUMN is_hidden BOOLEAN DEFAULT 0 NOT NULL")
+        )
+        logger.info("Migration: added is_hidden column to jobs table.")
+
+
 async def init_db(db_url: str | None = None) -> AsyncEngine:
     """Create the async engine, session factory, and all tables.
 
@@ -89,6 +101,8 @@ async def init_db(db_url: str | None = None) -> AsyncEngine:
 
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Lightweight migration: add is_hidden column if missing on existing DBs
+        await conn.run_sync(_migrate_jobs_is_hidden)
 
     logger.info("Database tables created/verified.")
     return _engine

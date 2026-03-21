@@ -52,6 +52,7 @@ def test_job_defaults() -> None:
     assert job.status == JobStatus.pending
     assert job.output == ""
     assert job.error == ""
+    assert job.is_hidden is False
     assert isinstance(job.created_at, datetime)
     assert job.completed_at is None
 

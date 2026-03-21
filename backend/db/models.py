@@ -36,6 +36,7 @@ class Job(Base):
         completed_at  — UTC timestamp when the job finished (NULL while running).
         output        — full stdout captured from terraform.
         error         — stderr or exception message on failure.
+        is_hidden     — soft-delete flag; hidden jobs excluded from default listing.
     """
 
     __tablename__ = "jobs"
@@ -58,6 +59,9 @@ class Job(Base):
     )
     output: Mapped[str] = mapped_column(Text, nullable=False, default="")
     error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    is_hidden: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
 
     def __repr__(self) -> str:
         return f"<Job id={self.id!r} type={self.type!r} status={self.status!r}>"

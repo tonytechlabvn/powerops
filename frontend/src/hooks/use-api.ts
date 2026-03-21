@@ -68,11 +68,14 @@ function mapJob(raw: any): Job {
   }
 }
 
-export function useJobs(status?: string) {
+export function useJobs(status?: string, includeHidden?: boolean) {
   return useQuery({
-    queryKey: queryKeys.jobs(status),
+    queryKey: [...queryKeys.jobs(status), includeHidden ?? false],
     queryFn: async () => {
-      const res = await apiClient.get<{ jobs: any[] }>('/api/jobs', status ? { status } : undefined)
+      const params: Record<string, string> = {}
+      if (status) params.status = status
+      if (includeHidden) params.include_hidden = 'true'
+      const res = await apiClient.get<{ jobs: any[] }>('/api/jobs', params)
       return (res.jobs ?? []).map(mapJob)
     },
     refetchInterval: 5000,
@@ -167,6 +170,15 @@ export function useDestroyMutation() {
         workspace,
         confirmation: 'destroy',
       }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+}
+
+export function useHideJobMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (jobId: string) =>
+      apiClient.patch<Job>(`/api/jobs/${jobId}/hide`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   })
 }

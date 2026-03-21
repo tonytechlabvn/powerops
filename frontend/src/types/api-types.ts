@@ -14,6 +14,7 @@ export interface Job {
   completed_at: string | null
   output: string | null
   error: string | null
+  is_hidden: boolean
 }
 
 export interface TemplateVariable {

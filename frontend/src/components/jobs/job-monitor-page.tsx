@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Loader2, Trash2 } from 'lucide-react'
-import { useJobs, useJob, useDestroyMutation } from '../../hooks/use-api'
+import { ChevronLeft, Loader2, Trash2, EyeOff } from 'lucide-react'
+import { useJobs, useJob, useDestroyMutation, useHideJobMutation } from '../../hooks/use-api'
 import { JobOutputStream } from './job-output-stream'
 import { JobHistoryTable } from './job-history-table'
 import { JobOutputSummary } from './job-output-summary'
@@ -16,7 +16,11 @@ function JobDetailView({ id }: { id: string }) {
   const isLive = job?.status === 'running' || job?.status === 'pending'
   const navigate = useNavigate()
   const destroyMutation = useDestroyMutation()
+  const hideMutation = useHideJobMutation()
   const [showDestroyConfirm, setShowDestroyConfirm] = useState(false)
+
+  const isTerminal = ['completed', 'failed', 'cancelled'].includes(job?.status ?? '')
+  const canHide = isTerminal && !job?.is_hidden
 
   // Show destroy option only for completed apply jobs with no existing destroy job
   const alreadyDestroyed = (allJobs ?? []).some(
@@ -64,6 +68,16 @@ function JobDetailView({ id }: { id: string }) {
             <span className="text-xs text-zinc-500">{formatDate(job.created_at)}</span>
           </div>
         </div>
+        {canHide && (
+          <button
+            onClick={() => hideMutation.mutate(job!.id, { onSuccess: () => navigate('/jobs') })}
+            disabled={hideMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50 transition-colors"
+          >
+            {hideMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <EyeOff size={14} />}
+            Hide
+          </button>
+        )}
         {canDestroy && (
           <button
             onClick={() => setShowDestroyConfirm(true)}
@@ -145,7 +159,8 @@ function JobDetailView({ id }: { id: string }) {
 
 // --- Jobs list page ---
 function JobListView() {
-  const { data: jobs, isLoading } = useJobs()
+  const [showHidden, setShowHidden] = useState(false)
+  const { data: jobs, isLoading } = useJobs(undefined, showHidden)
 
   return (
     <div className="space-y-6">
@@ -154,7 +169,18 @@ function JobListView() {
           <h1 className="text-2xl font-bold text-zinc-100">Jobs</h1>
           <p className="text-sm text-zinc-500 mt-1">Terraform job history and live monitoring</p>
         </div>
-        {isLoading && <Loader2 size={16} className="animate-spin text-zinc-500" />}
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showHidden}
+              onChange={(e) => setShowHidden(e.target.checked)}
+              className="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500/30"
+            />
+            Show hidden
+          </label>
+          {isLoading && <Loader2 size={16} className="animate-spin text-zinc-500" />}
+        </div>
       </div>
 
       <JobHistoryTable jobs={jobs ?? []} />

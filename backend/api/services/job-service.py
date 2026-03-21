@@ -27,6 +27,7 @@ def _orm_to_pydantic(orm: JobORM) -> Job:
         completed_at=orm.completed_at,
         output=orm.output,
         error=orm.error,
+        is_hidden=orm.is_hidden,
     )
 
 
@@ -86,6 +87,13 @@ class JobService:
         await self._session.flush()
         return _orm_to_pydantic(orm)
 
+    async def hide_job(self, job_id: str) -> Job:
+        """Soft-delete a terminal job by setting is_hidden = True."""
+        orm = await self._get_orm(job_id)
+        orm.is_hidden = True
+        await self._session.flush()
+        return _orm_to_pydantic(orm)
+
     async def get_job(self, job_id: str) -> Job | None:
         """Return job by ID or None if not found."""
         stmt = select(JobORM).where(JobORM.id == job_id)
@@ -98,9 +106,12 @@ class JobService:
         workspace: str | None = None,
         status: str | None = None,
         limit: int = 50,
+        include_hidden: bool = False,
     ) -> list[Job]:
         """Return jobs filtered by optional workspace and/or status."""
         stmt = select(JobORM).order_by(JobORM.created_at.desc()).limit(limit)
+        if not include_hidden:
+            stmt = stmt.where(JobORM.is_hidden == False)  # noqa: E712
         if workspace:
             stmt = stmt.where(JobORM.workspace_dir.contains(workspace))
         if status:

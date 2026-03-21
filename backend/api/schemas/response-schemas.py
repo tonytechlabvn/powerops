@@ -51,6 +51,7 @@ class JobResponse(BaseModel):
     completed_at: datetime | None = None
     output: str = ""
     error: str = ""
+    is_hidden: bool = False
 
 
 class JobListResponse(BaseModel):

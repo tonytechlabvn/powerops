@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronUp, ChevronDown, Trash2, Loader2 } from 'lucide-react'
+import { ChevronUp, ChevronDown, Trash2, Loader2, EyeOff } from 'lucide-react'
 import type { Job } from '../../types/api-types'
-import { useDestroyMutation } from '../../hooks/use-api'
+import { useDestroyMutation, useHideJobMutation } from '../../hooks/use-api'
 import { statusColor, formatDate, formatRelative } from '../../lib/utils'
 
 type SortKey = 'created_at' | 'status' | 'type' | 'workspace'
@@ -29,8 +29,10 @@ export function JobHistoryTable({ jobs }: JobHistoryTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [destroyingWorkspace, setDestroyingWorkspace] = useState<string | null>(null)
+  const [hidingJobId, setHidingJobId] = useState<string | null>(null)
   const navigate = useNavigate()
   const destroyMutation = useDestroyMutation()
+  const hideMutation = useHideJobMutation()
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -89,7 +91,7 @@ export function JobHistoryTable({ jobs }: JobHistoryTableProps) {
         </thead>
         <tbody className="divide-y divide-zinc-800 bg-zinc-900">
           {sorted.map(job => (
-            <tr key={job.id} className="hover:bg-zinc-800/50 transition-colors">
+            <tr key={job.id} className={`hover:bg-zinc-800/50 transition-colors ${job.is_hidden ? 'opacity-40' : ''}`}>
               <td className="px-4 py-3 text-zinc-200 font-mono text-xs max-w-xs truncate">
                 {job.workspace}
               </td>
@@ -139,6 +141,32 @@ export function JobHistoryTable({ jobs }: JobHistoryTableProps) {
                       ? <Loader2 size={12} className="animate-spin" />
                       : <Trash2 size={12} />}
                     {destroyingWorkspace === job.workspace ? 'Confirm' : 'Destroy'}
+                  </button>
+                )}
+                {['completed', 'failed', 'cancelled'].includes(job.status) && !job.is_hidden && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (hidingJobId === job.id) {
+                        hideMutation.mutate(job.id, {
+                          onSuccess: () => setHidingJobId(null),
+                        })
+                      } else {
+                        setHidingJobId(job.id)
+                      }
+                    }}
+                    disabled={hideMutation.isPending && hidingJobId === job.id}
+                    className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded border transition-colors ${
+                      hidingJobId === job.id
+                        ? 'border-amber-500/50 bg-amber-600 text-white hover:bg-amber-500'
+                        : 'border-zinc-600 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                    }`}
+                    title={hidingJobId === job.id ? 'Click again to confirm' : 'Hide this job'}
+                  >
+                    {hideMutation.isPending && hidingJobId === job.id
+                      ? <Loader2 size={12} className="animate-spin" />
+                      : <EyeOff size={12} />}
+                    {hidingJobId === job.id ? 'Confirm' : 'Hide'}
                   </button>
                 )}
               </td>

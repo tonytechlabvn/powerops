@@ -1,8 +1,9 @@
 """Job management routes.
 
-GET    /api/jobs           — list jobs with optional filters
-GET    /api/jobs/{job_id}  — job details
-DELETE /api/jobs/{job_id}  — cancel a pending or running job
+GET    /api/jobs                — list jobs with optional filters
+GET    /api/jobs/{job_id}       — job details
+DELETE /api/jobs/{job_id}       — cancel a pending or running job
+PATCH  /api/jobs/{job_id}/hide  — soft-delete a terminal job
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ def _job_to_response(job) -> JobResponse:
         completed_at=job.completed_at,
         output=job.output,
         error=job.error,
+        is_hidden=job.is_hidden,
     )
 
 
@@ -34,11 +36,15 @@ async def list_jobs(
     workspace: str | None = Query(None, description="Filter by workspace name"),
     status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=200),
+    include_hidden: bool = Query(False, description="Include hidden (soft-deleted) jobs"),
 ) -> JobListResponse:
     """List jobs with optional workspace and status filters."""
     async with get_session() as session:
         svc = JobService(session)
-        jobs = await svc.list_jobs(workspace=workspace, status=status, limit=limit)
+        jobs = await svc.list_jobs(
+            workspace=workspace, status=status, limit=limit,
+            include_hidden=include_hidden,
+        )
     return JobListResponse(jobs=[_job_to_response(j) for j in jobs], total=len(jobs))
 
 
@@ -65,4 +71,21 @@ async def cancel_job(job_id: str) -> JobResponse:
                 f"Job {job_id} is already '{job.status.value}' and cannot be cancelled"
             )
         job = await svc.cancel_job(job_id)
+    return _job_to_response(job)
+
+
+@router.patch("/{job_id}/hide", response_model=JobResponse)
+async def hide_job(job_id: str) -> JobResponse:
+    """Soft-delete a terminal job (completed/failed/cancelled)."""
+    async with get_session() as session:
+        svc = JobService(session)
+        job = await svc.get_job(job_id)
+        if job is None:
+            raise ValueError(f"Job not found: {job_id}")
+        terminal = (JobStatus.completed, JobStatus.failed, JobStatus.cancelled)
+        if job.status not in terminal:
+            raise ValueError(
+                f"Only terminal jobs can be hidden (current: '{job.status.value}')"
+            )
+        job = await svc.hide_job(job_id)
     return _job_to_response(job)
