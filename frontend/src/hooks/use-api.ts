@@ -59,12 +59,21 @@ export function useTemplate(name: string) {
   })
 }
 
+// Map API job shape (workspace_dir) to frontend Job shape (workspace)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapJob(raw: any): Job {
+  return {
+    ...raw,
+    workspace: raw.workspace ?? raw.workspace_dir ?? '',
+  }
+}
+
 export function useJobs(status?: string) {
   return useQuery({
     queryKey: queryKeys.jobs(status),
     queryFn: async () => {
-      const res = await apiClient.get<{ jobs: Job[] }>('/api/jobs', status ? { status } : undefined)
-      return res.jobs ?? []
+      const res = await apiClient.get<{ jobs: any[] }>('/api/jobs', status ? { status } : undefined)
+      return (res.jobs ?? []).map(mapJob)
     },
     refetchInterval: 5000,
   })
@@ -73,7 +82,10 @@ export function useJobs(status?: string) {
 export function useJob(id: string) {
   return useQuery({
     queryKey: queryKeys.job(id),
-    queryFn: () => apiClient.get<Job>(`/api/jobs/${id}`),
+    queryFn: async () => {
+      const raw = await apiClient.get<any>(`/api/jobs/${id}`)
+      return mapJob(raw)
+    },
     enabled: !!id,
     refetchInterval: 3000,
   })
