@@ -118,6 +118,23 @@ async def _run_plan(
         ss.append_line(job_id, f"[error] {exc}")
 
 
+def _extract_errors_from_stream(lines: list[str]) -> list[str]:
+    """Parse streamed Terraform JSON lines for error diagnostics."""
+    import json as _json
+    errors: list[str] = []
+    for line in lines:
+        try:
+            obj = _json.loads(line)
+            if obj.get("@level") == "error":
+                msg = obj.get("@message", "")
+                diag = obj.get("diagnostic", {})
+                summary = diag.get("summary", "")
+                errors.append(summary or msg or "Unknown error")
+        except (_json.JSONDecodeError, AttributeError):
+            continue
+    return errors
+
+
 async def _run_apply(
     job_id: str,
     workspace: str,
@@ -131,12 +148,23 @@ async def _run_apply(
         if plan_file:
             stream_args.append(plan_file)
 
+        buffered: list[str] = []
         async for line in runner.stream(*stream_args):
             ss.append_line(job_id, line)
+            buffered.append(line)
 
-        result = await runner.apply(plan_file=plan_file, auto_approve=True)
+        # Check for errors in the streamed output
+        errors = _extract_errors_from_stream(buffered)
+        if errors:
+            error_msg = "; ".join(errors)
+            async with get_session() as session:
+                await JobService(session).fail_job(job_id, error=error_msg)
+            ss.append_line(job_id, f"[error] {error_msg}")
+            return
+
+        output_text = "\n".join(buffered)
         async with get_session() as session:
-            await JobService(session).complete_job(job_id, output=result.raw_output)
+            await JobService(session).complete_job(job_id, output=output_text)
         ss.append_line(job_id, "[apply] completed successfully")
     except Exception as exc:
         async with get_session() as session:
