@@ -58,10 +58,7 @@ async def _run_deploy(
     try:
         # Step 1: Render template
         ss.append_line(job_id, f"[deploy] Rendering template: {template_name}")
-        engine = template_engine.TemplateEngine(
-            template_root=Path(settings.template_dir)
-        )
-        rendered_hcl = engine.render_template(template_name, variables)
+        rendered_hcl = template_engine.render_template(template_name, variables)
 
         # Write rendered HCL to workspace
         main_tf = ws_path / "main.tf"
