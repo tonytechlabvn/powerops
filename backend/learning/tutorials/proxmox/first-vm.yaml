@@ -1,0 +1,93 @@
+name: first-vm
+title: "Create Your First Proxmox VM"
+provider: proxmox
+difficulty: beginner
+duration: "20min"
+template: proxmox/vm-ubuntu
+prerequisites: []
+concepts: [provider, resource, variable, plan, apply]
+description: >
+  Learn how to provision a virtual machine on a Proxmox hypervisor using
+  the Telmate Proxmox provider. You will configure the provider connection,
+  set VM hardware parameters, plan the deployment, and SSH into your new VM.
+
+steps:
+  - id: 1
+    title: "Connect to Proxmox"
+    explain: |
+      Before Terraform can manage Proxmox resources, you must configure the
+      provider with your Proxmox API endpoint and credentials.
+      Required provider settings:
+        - pm_api_url: Proxmox API URL (e.g. "https://192.168.1.100:8006/api2/json").
+        - pm_api_token_id: API token ID (e.g. "root@pam!terraform").
+        - pm_api_token_secret: the secret value of your API token.
+        - pm_tls_insecure: set to true if using a self-signed certificate.
+      Create an API token in Proxmox: Datacenter → Permissions → API Tokens.
+    action: set_variables
+    required_vars:
+      - pm_api_url
+      - pm_api_token_id
+      - pm_api_token_secret
+      - pm_tls_insecure
+    hint: "API tokens are safer than using root password credentials."
+
+  - id: 2
+    title: "Configure the VM"
+    explain: |
+      Set the VM hardware and placement variables:
+        - target_node: the Proxmox node name to deploy on (e.g. "pve").
+        - vm_name: a unique name for the VM (e.g. "ubuntu-web-01").
+        - vm_id: unique numeric ID in Proxmox (e.g. 200).
+        - cores: number of vCPU cores (e.g. 2).
+        - memory: RAM in MB (e.g. 2048).
+        - disk_size: root disk size (e.g. "20G").
+        - clone_template: name of the VM template to clone from.
+        - ip_address: static IP in CIDR format (e.g. "192.168.1.50/24").
+        - gateway: network gateway IP (e.g. "192.168.1.1").
+    action: set_variables
+    required_vars:
+      - target_node
+      - vm_name
+      - vm_id
+      - cores
+      - memory
+      - disk_size
+      - clone_template
+      - ip_address
+      - gateway
+    hint: "The clone_template must already exist as a VM template in Proxmox."
+
+  - id: 3
+    title: "Run Terraform Plan"
+    explain: |
+      Run 'terraform plan' to preview the VM creation.
+      The plan will show one resource: proxmox_vm_qemu.<vm_name>.
+      Review the hardware attributes — cores, memory, disk — and confirm they
+      match your intended configuration before applying.
+      The plan also shows computed attributes (marked as 'known after apply')
+      such as the VM's MAC address.
+    action: run_plan
+    hint: "QEMU is the virtualisation engine Proxmox uses under the hood."
+
+  - id: 4
+    title: "Apply — Provision the VM"
+    explain: |
+      Run 'terraform apply' to create the VM on your Proxmox host.
+      Terraform calls the Proxmox API to clone your template, resize the disk,
+      configure the network, and start the VM.
+      This step may take 2–5 minutes depending on template size and disk speed.
+      After apply, the output will show the VM ID and assigned IP address.
+    action: run_apply
+    hint: "Watch the Proxmox console during apply to see the VM boot."
+
+  - id: 5
+    title: "SSH into the VM"
+    explain: |
+      Verify the VM is running and accessible:
+        1. Wait 30–60 seconds for cloud-init to complete first boot setup.
+        2. SSH to the VM: ssh ubuntu@<ip_address>
+           (default user depends on your template — commonly 'ubuntu' or 'root').
+        3. Run 'hostname' and 'free -h' to confirm the resources are correct.
+        4. Run 'terraform destroy' to remove the VM when you are done.
+    action: verify_and_destroy
+    hint: "Cloud-init handles SSH key injection — check your template's cloud-init config."

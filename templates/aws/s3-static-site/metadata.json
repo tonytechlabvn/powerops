@@ -1,0 +1,9 @@
+{
+  "name": "aws/s3-static-site",
+  "display_name": "AWS S3 Static Website",
+  "description": "S3 bucket configured for static website hosting with public access, index/error documents, and optional custom domain support.",
+  "provider": "aws",
+  "version": "1.0.0",
+  "tags": ["aws", "s3", "static-site", "website", "storage"],
+  "author": "TerraBot"
+}

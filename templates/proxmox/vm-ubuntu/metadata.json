@@ -1,0 +1,9 @@
+{
+  "name": "proxmox/vm-ubuntu",
+  "display_name": "Proxmox Ubuntu VM",
+  "description": "Provisions an Ubuntu VM on Proxmox VE using a cloud-init image. Configures SSH key authentication and basic networking.",
+  "provider": "proxmox",
+  "version": "1.0.0",
+  "tags": ["proxmox", "vm", "ubuntu", "cloud-init"],
+  "author": "TerraBot"
+}

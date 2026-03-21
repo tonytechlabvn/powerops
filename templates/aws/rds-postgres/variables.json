@@ -1,0 +1,79 @@
+{
+  "variables": [
+    {
+      "name": "vpc_id",
+      "type": "string",
+      "description": "ID of the VPC where RDS will be deployed.",
+      "required": true
+    },
+    {
+      "name": "subnet_ids",
+      "type": "string",
+      "description": "Comma-separated private subnet IDs for the DB subnet group.",
+      "required": true
+    },
+    {
+      "name": "db_name",
+      "type": "string",
+      "description": "Name of the initial database to create.",
+      "default": "appdb",
+      "required": false
+    },
+    {
+      "name": "username",
+      "type": "string",
+      "description": "Master database username.",
+      "default": "dbadmin",
+      "required": false
+    },
+    {
+      "name": "instance_class",
+      "type": "string",
+      "description": "RDS instance class (e.g. db.t3.micro, db.t3.small).",
+      "default": "db.t3.micro",
+      "required": false
+    },
+    {
+      "name": "allocated_storage",
+      "type": "number",
+      "description": "Allocated storage in gigabytes.",
+      "default": 20,
+      "required": false
+    },
+    {
+      "name": "postgres_version",
+      "type": "string",
+      "description": "PostgreSQL engine version.",
+      "default": "15.4",
+      "required": false
+    },
+    {
+      "name": "multi_az",
+      "type": "bool",
+      "description": "Enable Multi-AZ deployment for high availability.",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "backup_retention_days",
+      "type": "number",
+      "description": "Number of days to retain automated backups (0 disables backups).",
+      "default": 7,
+      "required": false
+    },
+    {
+      "name": "aws_region",
+      "type": "string",
+      "description": "AWS region (e.g. us-east-1).",
+      "default": "us-east-1",
+      "required": false
+    },
+    {
+      "name": "environment",
+      "type": "string",
+      "description": "Deployment environment tag (e.g. dev, staging, prod).",
+      "default": "dev",
+      "required": false
+    }
+  ]
+}

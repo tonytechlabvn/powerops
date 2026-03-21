@@ -1,0 +1,80 @@
+terraform {
+  required_providers {
+    proxmox = {
+      source  = "bpg/proxmox"
+      version = "~> 0.66"
+    }
+  }
+}
+
+provider "proxmox" {
+  endpoint = "{{ proxmox_api_url }}"
+  insecure = true
+
+  ssh {
+    agent = true
+  }
+}
+
+# ---------------------------------------------------------------------------
+# LXC Container
+# ---------------------------------------------------------------------------
+
+resource "proxmox_virtual_environment_container" "lxc" {
+  node_name   = "{{ proxmox_node }}"
+  vm_id       = {{ vmid }}
+  description = "Managed by TerraBot — environment: {{ environment }}"
+
+  initialization {
+    hostname = "{{ hostname }}"
+
+    ip_config {
+      ipv4 {
+        address = "{{ ip_config }}"
+      }
+    }
+
+    user_account {
+      keys = ["{{ ssh_public_key }}"]
+    }
+  }
+
+  cpu {
+    cores = {{ cores }}
+  }
+
+  memory {
+    dedicated = {{ memory }}
+  }
+
+  disk {
+    datastore_id = "{{ rootfs_storage }}"
+    size         = {{ rootfs_size | replace("G", "") }}
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "{{ bridge }}"
+  }
+
+  operating_system {
+    template_file_id = "{{ ostemplate }}"
+    type             = "ubuntu"
+  }
+
+  tags = ["terrabot", "{{ environment }}"]
+}
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+
+output "container_id" {
+  description = "Proxmox container VM ID."
+  value       = proxmox_virtual_environment_container.lxc.vm_id
+}
+
+output "container_hostname" {
+  description = "Container hostname."
+  value       = proxmox_virtual_environment_container.lxc.initialization[0].hostname
+}

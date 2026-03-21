@@ -1,0 +1,89 @@
+name: container-basics
+title: "Run Your First Proxmox LXC Container"
+provider: proxmox
+difficulty: beginner
+duration: "15min"
+template: proxmox/lxc-container
+prerequisites: [first-vm]
+concepts: [provider, resource, variable, plan, apply]
+description: >
+  Learn how to deploy a lightweight LXC container on Proxmox using Terraform.
+  Containers start faster and use fewer resources than VMs, making them ideal
+  for services like web servers, databases, and DNS resolvers.
+
+steps:
+  - id: 1
+    title: "Choose a Container Template"
+    explain: |
+      Proxmox LXC containers are built from OS templates — compressed archives
+      containing a minimal Linux root filesystem.
+      Common templates available in Proxmox:
+        - ubuntu-22.04-standard: Ubuntu 22.04 LTS (most compatible).
+        - debian-12-standard: Debian 12 Bookworm (lightweight).
+        - alpine-3.19-default: Alpine Linux (minimal, ~5MB).
+      Templates are stored in Proxmox storage (typically 'local').
+      Check available templates: Proxmox UI → Node → local → CT Templates.
+      Set the 'ostemplate' variable to the full template path, e.g.:
+        "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
+    action: view_template
+    hint: "Download missing templates via: pveam download local <template-name>"
+
+  - id: 2
+    title: "Configure the Container"
+    explain: |
+      Set the container resource variables:
+        - target_node: Proxmox node name (e.g. "pve").
+        - ct_id: unique numeric container ID (e.g. 300).
+        - hostname: container hostname (e.g. "my-container").
+        - ostemplate: full path to the OS template (from Step 1).
+        - cores: number of vCPU cores (e.g. 1).
+        - memory: RAM in MB (e.g. 512).
+        - rootfs_size: root filesystem size (e.g. "8G").
+        - ip_address: static IP in CIDR (e.g. "192.168.1.60/24").
+        - gateway: network gateway (e.g. "192.168.1.1").
+        - root_password: root password for the container.
+        - ssh_public_key: your SSH public key for key-based login.
+    action: set_variables
+    required_vars:
+      - target_node
+      - ct_id
+      - hostname
+      - ostemplate
+      - cores
+      - memory
+      - rootfs_size
+      - ip_address
+      - gateway
+      - root_password
+      - ssh_public_key
+    hint: "Containers use much less memory than VMs — 512MB is plenty for most services."
+
+  - id: 3
+    title: "Plan and Apply"
+    explain: |
+      Run 'terraform plan' to preview the container creation.
+      You should see one resource: proxmox_lxc.<hostname>.
+      After reviewing the plan, run 'terraform apply' to create the container.
+      Container creation is fast — typically under 30 seconds since there is
+      no full OS boot process, just filesystem extraction and network setup.
+      The output will show the container ID and IP address.
+    action: run_apply
+    hint: "LXC containers share the host kernel — no hypervisor overhead."
+
+  - id: 4
+    title: "Access the Container"
+    explain: |
+      Access your running container in two ways:
+        Option A — SSH:
+          ssh root@<ip_address>
+          (or use your SSH key if ssh_public_key was set)
+        Option B — Proxmox console:
+          pct enter <ct_id>
+          (runs a shell directly on the Proxmox host)
+      Inside the container, run:
+        cat /etc/os-release   — confirm the OS
+        free -m               — check memory allocation
+        ip addr               — verify network configuration
+      When finished, run 'terraform destroy' to remove the container.
+    action: verify_and_destroy
+    hint: "pct enter <id> gives instant console access without needing SSH."

@@ -1,0 +1,9 @@
+{
+  "name": "aws/rds-postgres",
+  "display_name": "AWS RDS PostgreSQL",
+  "description": "RDS PostgreSQL instance with subnet group, parameter group, automated backups, and security group. Deployed in private subnets.",
+  "provider": "aws",
+  "version": "1.0.0",
+  "tags": ["aws", "rds", "postgresql", "database"],
+  "author": "TerraBot"
+}

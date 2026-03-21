@@ -1,0 +1,45 @@
+{
+  "variables": [
+    {
+      "name": "bucket_name",
+      "type": "string",
+      "description": "Globally unique S3 bucket name.",
+      "required": true
+    },
+    {
+      "name": "aws_region",
+      "type": "string",
+      "description": "AWS region for the bucket (e.g. us-east-1).",
+      "default": "us-east-1",
+      "required": false
+    },
+    {
+      "name": "index_document",
+      "type": "string",
+      "description": "Website index document filename.",
+      "default": "index.html",
+      "required": false
+    },
+    {
+      "name": "error_document",
+      "type": "string",
+      "description": "Website error document filename.",
+      "default": "error.html",
+      "required": false
+    },
+    {
+      "name": "versioning_enabled",
+      "type": "bool",
+      "description": "Enable S3 object versioning.",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "environment",
+      "type": "string",
+      "description": "Deployment environment tag (e.g. dev, staging, prod).",
+      "default": "dev",
+      "required": false
+    }
+  ]
+}

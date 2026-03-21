@@ -1,0 +1,9 @@
+{
+  "name": "aws/security-group-web",
+  "display_name": "AWS Security Group (Web Server)",
+  "description": "Security group allowing inbound HTTP (80), HTTPS (443), and SSH (22) traffic. Suitable for web server instances.",
+  "provider": "aws",
+  "version": "1.0.0",
+  "tags": ["aws", "security-group", "web", "networking"],
+  "author": "TerraBot"
+}

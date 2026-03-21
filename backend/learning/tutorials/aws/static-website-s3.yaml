@@ -1,0 +1,73 @@
+name: static-website-s3
+title: "Host a Static Website on S3"
+provider: aws
+difficulty: beginner
+duration: "15min"
+template: aws/s3-static-website
+prerequisites: [your-first-ec2]
+concepts: [resource, variable, output, plan, apply]
+description: >
+  Deploy a static website using AWS S3 static website hosting. You will
+  create an S3 bucket, enable website hosting, set a public access policy,
+  and get a working URL — all with Terraform.
+
+steps:
+  - id: 1
+    title: "Create the Bucket"
+    explain: |
+      An S3 bucket is AWS object storage. For static website hosting you need:
+        - aws_s3_bucket: the bucket itself (name must be globally unique).
+        - aws_s3_bucket_website_configuration: enables website hosting mode.
+        - aws_s3_bucket_public_access_block: controls public access settings.
+        - aws_s3_bucket_policy: grants public read access to all objects.
+      Set these variables:
+        - bucket_name: globally unique name (e.g. "my-site-2024-abc123").
+        - region: AWS region (e.g. "us-east-1").
+        - index_document: default page filename (typically "index.html").
+        - error_document: 404 page filename (typically "error.html").
+    action: set_variables
+    required_vars:
+      - bucket_name
+      - region
+      - index_document
+      - error_document
+    hint: "S3 bucket names must be globally unique across all AWS accounts."
+
+  - id: 2
+    title: "Configure Static Hosting"
+    explain: |
+      The template configures website hosting with these key settings:
+        - index_document: served when a user requests the root URL ('/').
+        - error_document: served for 404 Not Found responses.
+        - public access block: all four block settings must be false to allow
+          public read access through a bucket policy.
+        - bucket policy: grants s3:GetObject to the '*' principal (everyone).
+      Review the template to understand each resource's role.
+    action: view_template
+    hint: "A bucket policy is separate from ACLs — both may need to allow access."
+
+  - id: 3
+    title: "Plan and Apply"
+    explain: |
+      Run 'terraform plan' to verify 4 resources will be created.
+      Then run 'terraform apply' to create the bucket and configure hosting.
+      After apply, the output will include:
+        - bucket_name: your S3 bucket name.
+        - website_endpoint: the HTTP URL of your static site.
+      Note: HTTPS requires CloudFront (not covered in this tutorial).
+    action: run_apply
+    hint: "Website endpoint format: <bucket>.s3-website-<region>.amazonaws.com"
+
+  - id: 4
+    title: "Test the Website"
+    explain: |
+      Test your static site:
+        1. Copy the website_endpoint output value.
+        2. Upload an index.html file to your bucket via the AWS Console or CLI:
+             aws s3 cp index.html s3://<bucket_name>/
+        3. Visit the website_endpoint URL in your browser.
+        4. Confirm the page loads correctly.
+      When done, run 'terraform destroy' to remove the bucket and all resources.
+      Note: the bucket must be empty before destroy will succeed.
+    action: verify_and_destroy
+    hint: "Empty the bucket first: aws s3 rm s3://<bucket_name> --recursive"

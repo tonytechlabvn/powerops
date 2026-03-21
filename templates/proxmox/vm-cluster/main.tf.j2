@@ -1,0 +1,112 @@
+terraform {
+  required_providers {
+    proxmox = {
+      source  = "bpg/proxmox"
+      version = "~> 0.66"
+    }
+  }
+}
+
+provider "proxmox" {
+  endpoint = "{{ proxmox_api_url }}"
+  insecure = true
+
+  ssh {
+    agent = true
+  }
+}
+
+locals {
+  # Resolve template node/id from data source below
+  template_id = data.proxmox_virtual_environment_vms.template.vms[0].vm_id
+}
+
+# Look up the source template by name
+data "proxmox_virtual_environment_vms" "template" {
+  node_name = "{{ proxmox_node }}"
+  filter {
+    name   = "name"
+    values = ["{{ template_name }}"]
+  }
+}
+
+# ---------------------------------------------------------------------------
+# VM Cluster — count-based provisioning
+# ---------------------------------------------------------------------------
+
+resource "proxmox_virtual_environment_vm" "cluster" {
+  count     = {{ vm_count }}
+  node_name = "{{ proxmox_node }}"
+  vm_id     = {{ vmid_base }} + count.index
+  name      = "{{ name_prefix }}-${count.index}"
+
+  description = "Cluster node ${count.index} — managed by TerraBot ({{ environment }})"
+  tags        = ["terrabot", "{{ environment }}", "{{ name_prefix }}"]
+
+  clone {
+    vm_id = local.template_id
+    full  = true
+  }
+
+  cpu {
+    cores = {{ cores }}
+    type  = "host"
+  }
+
+  memory {
+    dedicated = {{ memory }}
+  }
+
+  disk {
+    datastore_id = "{{ storage_pool }}"
+    size         = {{ disk_size }}
+    interface    = "scsi0"
+    file_format  = "raw"
+  }
+
+  network_device {
+    bridge = "{{ bridge }}"
+    model  = "virtio"
+  }
+
+  initialization {
+    {% if ip_config_base == "dhcp" %}
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+    {% else %}
+    # Sequential static IPs: base_ip + count.index on last octet
+    # e.g. base 192.168.1.10 → 192.168.1.10, 192.168.1.11, 192.168.1.12 …
+    ip_config {
+      ipv4 {
+        address = cidrhost("{{ ip_config_base }}/24", {{ vmid_base }} + count.index)
+        gateway = "{{ gateway }}"
+      }
+    }
+    {% endif %}
+
+    user_account {
+      keys = ["{{ ssh_public_key }}"]
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [clone]
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+
+output "vm_ids" {
+  description = "List of provisioned VM IDs."
+  value       = proxmox_virtual_environment_vm.cluster[*].vm_id
+}
+
+output "vm_names" {
+  description = "List of provisioned VM names."
+  value       = proxmox_virtual_environment_vm.cluster[*].name
+}

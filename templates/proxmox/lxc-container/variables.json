@@ -1,0 +1,93 @@
+{
+  "variables": [
+    {
+      "name": "proxmox_api_url",
+      "type": "string",
+      "description": "Proxmox API endpoint URL (e.g. https://proxmox.example.com:8006/api2/json).",
+      "required": true
+    },
+    {
+      "name": "proxmox_node",
+      "type": "string",
+      "description": "Proxmox node name where the container will be created.",
+      "default": "pve",
+      "required": false
+    },
+    {
+      "name": "vmid",
+      "type": "number",
+      "description": "Unique container ID in Proxmox (100–999999).",
+      "default": 300,
+      "required": false
+    },
+    {
+      "name": "hostname",
+      "type": "string",
+      "description": "Container hostname.",
+      "default": "lxc-container",
+      "required": false
+    },
+    {
+      "name": "ostemplate",
+      "type": "string",
+      "description": "LXC OS template (e.g. local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst).",
+      "default": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
+      "required": false
+    },
+    {
+      "name": "rootfs_storage",
+      "type": "string",
+      "description": "Storage pool for the root filesystem.",
+      "default": "local-lvm",
+      "required": false
+    },
+    {
+      "name": "rootfs_size",
+      "type": "string",
+      "description": "Root filesystem size (e.g. 8G).",
+      "default": "8G",
+      "required": false
+    },
+    {
+      "name": "cores",
+      "type": "number",
+      "description": "Number of CPU cores.",
+      "default": 1,
+      "required": false
+    },
+    {
+      "name": "memory",
+      "type": "number",
+      "description": "Memory in megabytes.",
+      "default": 512,
+      "required": false
+    },
+    {
+      "name": "ip_config",
+      "type": "string",
+      "description": "Network IP config (e.g. ip=192.168.1.200/24,gw=192.168.1.1 or ip=dhcp).",
+      "default": "ip=dhcp",
+      "required": false
+    },
+    {
+      "name": "bridge",
+      "type": "string",
+      "description": "Network bridge to attach (e.g. vmbr0).",
+      "default": "vmbr0",
+      "required": false
+    },
+    {
+      "name": "ssh_public_key",
+      "type": "string",
+      "description": "SSH public key injected into the container for root access.",
+      "required": true
+    },
+    {
+      "name": "environment",
+      "type": "string",
+      "description": "Environment tag (e.g. dev, staging, prod).",
+      "default": "dev",
+      "required": false
+    }
+  ]
+}

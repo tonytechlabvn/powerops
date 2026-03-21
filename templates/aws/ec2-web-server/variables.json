@@ -1,0 +1,59 @@
+{
+  "variables": [
+    {
+      "name": "aws_region",
+      "type": "string",
+      "description": "AWS region to deploy into (e.g. us-east-1).",
+      "default": "us-east-1",
+      "required": false
+    },
+    {
+      "name": "instance_type",
+      "type": "string",
+      "description": "EC2 instance type (e.g. t3.micro, t3.small).",
+      "default": "t3.micro",
+      "required": false
+    },
+    {
+      "name": "ami_id",
+      "type": "string",
+      "description": "AMI ID for the EC2 instance. Must match the target region.",
+      "default": "ami-0c02fb55956c7d316",
+      "required": false
+    },
+    {
+      "name": "key_name",
+      "type": "string",
+      "description": "Name of the EC2 key pair for SSH access.",
+      "required": true
+    },
+    {
+      "name": "instance_name",
+      "type": "string",
+      "description": "Name tag applied to the EC2 instance.",
+      "default": "web-server",
+      "required": false
+    },
+    {
+      "name": "allowed_ssh_cidr",
+      "type": "string",
+      "description": "CIDR block allowed SSH access (port 22). Use your IP for security.",
+      "default": "0.0.0.0/0",
+      "required": false
+    },
+    {
+      "name": "root_volume_size_gb",
+      "type": "number",
+      "description": "Root EBS volume size in gigabytes.",
+      "default": 20,
+      "required": false
+    },
+    {
+      "name": "environment",
+      "type": "string",
+      "description": "Deployment environment tag (e.g. dev, staging, prod).",
+      "default": "dev",
+      "required": false
+    }
+  ]
+}

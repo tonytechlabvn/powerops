@@ -1,0 +1,9 @@
+{
+  "name": "proxmox/vm-cluster",
+  "display_name": "Proxmox VM Cluster",
+  "description": "Provisions multiple Proxmox VMs using count, cloned from a cloud-init template. Suitable for clusters, replica sets, or worker pools.",
+  "provider": "proxmox",
+  "version": "1.0.0",
+  "tags": ["proxmox", "vm", "cluster", "count", "cloud-init"],
+  "author": "TerraBot"
+}

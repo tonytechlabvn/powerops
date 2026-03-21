@@ -1,0 +1,83 @@
+name: your-first-ec2
+title: "Deploy Your First EC2 Instance"
+provider: aws
+difficulty: beginner
+duration: "15min"
+template: aws/ec2-web-server
+prerequisites: []
+concepts: [provider, resource, variable, plan, apply]
+description: >
+  Learn how to deploy a virtual machine on AWS using Terraform. You will
+  write a resource block, set variables, preview changes with plan, then
+  apply them to create a real EC2 instance.
+
+steps:
+  - id: 1
+    title: "Understand the Template"
+    explain: |
+      The ec2-web-server template creates three things:
+        1. A security group that allows HTTP (80), HTTPS (443), and SSH (22) traffic.
+        2. An EC2 instance attached to that security group.
+        3. Outputs that print the public IP after apply.
+      Open the template and read through main.tf.j2 before making any changes.
+    action: view_template
+    hint: "Look for the 'resource' blocks — each one maps to a real AWS object."
+
+  - id: 2
+    title: "Set Your Variables"
+    explain: |
+      Variables let you customise the template without editing HCL directly.
+      For this tutorial you need to supply:
+        - instance_type: the EC2 size (start with "t3.micro" — it's free-tier eligible).
+        - key_name: the name of your EC2 key pair for SSH access.
+        - region: AWS region to deploy into (e.g. "us-east-1").
+    action: set_variables
+    required_vars:
+      - instance_type
+      - key_name
+      - region
+    hint: "Use 't3.micro' to stay within the AWS free tier."
+
+  - id: 3
+    title: "Run Terraform Plan"
+    explain: |
+      'terraform plan' shows exactly what Terraform will do before touching
+      any real infrastructure. It compares your configuration against the
+      current state and prints a diff.
+      Green '+' lines = resources being created.
+      Red '-' lines = resources being destroyed.
+      Yellow '~' lines = resources being updated in-place.
+    action: run_plan
+    hint: "No changes are made during plan — it is completely safe to run."
+
+  - id: 4
+    title: "Review the Plan Output"
+    explain: |
+      Before applying, review every change in the plan output:
+        - Confirm the correct instance_type is shown.
+        - Check that only 2 resources are being created (security group + instance).
+        - Note the 'Plan: 2 to add, 0 to change, 0 to destroy' summary line.
+      If anything looks wrong, go back to Step 2 and correct your variables.
+    action: review_plan
+    hint: "Destructive changes (destroy/replace) appear in red — be cautious."
+
+  - id: 5
+    title: "Apply the Configuration"
+    explain: |
+      'terraform apply' executes the plan and creates real AWS resources.
+      Terraform will ask for confirmation — type 'yes' when prompted.
+      After apply completes, the outputs section shows your instance's public IP.
+    action: run_apply
+    hint: "Apply can take 1–3 minutes as AWS provisions the instance."
+
+  - id: 6
+    title: "Verify and Clean Up"
+    explain: |
+      Verify the instance is running:
+        1. Copy the public_ip output value.
+        2. SSH in: ssh -i ~/.ssh/<key_name>.pem ec2-user@<public_ip>
+        3. Confirm the instance is reachable.
+      When finished, run 'terraform destroy' to delete all resources and avoid
+      ongoing AWS charges. Confirm with 'yes' when prompted.
+    action: verify_and_destroy
+    hint: "Always destroy tutorial resources to avoid unexpected AWS charges."

@@ -1,0 +1,9 @@
+{
+  "name": "aws/ec2-web-server",
+  "display_name": "AWS EC2 Web Server",
+  "description": "Provisions an EC2 instance with a security group that allows HTTP/HTTPS and SSH access. Suitable for single-instance web applications.",
+  "provider": "aws",
+  "version": "1.0.0",
+  "tags": ["aws", "ec2", "web", "compute"],
+  "author": "TerraBot"
+}

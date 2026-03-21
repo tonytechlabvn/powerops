@@ -1,0 +1,107 @@
+{
+  "variables": [
+    {
+      "name": "proxmox_api_url",
+      "type": "string",
+      "description": "Proxmox API endpoint URL (e.g. https://proxmox.example.com:8006/api2/json).",
+      "required": true
+    },
+    {
+      "name": "proxmox_node",
+      "type": "string",
+      "description": "Proxmox node name where VMs will be created.",
+      "default": "pve",
+      "required": false
+    },
+    {
+      "name": "vm_count",
+      "type": "number",
+      "description": "Number of VMs to provision in the cluster.",
+      "default": 3,
+      "required": false
+    },
+    {
+      "name": "name_prefix",
+      "type": "string",
+      "description": "Prefix for VM names (e.g. 'worker' produces worker-0, worker-1 …).",
+      "default": "node",
+      "required": false
+    },
+    {
+      "name": "vmid_base",
+      "type": "number",
+      "description": "Starting VM ID. Each VM gets vmid_base + index (e.g. 400, 401, 402).",
+      "default": 400,
+      "required": false
+    },
+    {
+      "name": "template_name",
+      "type": "string",
+      "description": "Name of the Proxmox VM template to clone.",
+      "default": "ubuntu-22.04-cloudinit",
+      "required": false
+    },
+    {
+      "name": "cores",
+      "type": "number",
+      "description": "Number of vCPU cores per VM.",
+      "default": 2,
+      "required": false
+    },
+    {
+      "name": "memory",
+      "type": "number",
+      "description": "Memory in megabytes per VM.",
+      "default": 2048,
+      "required": false
+    },
+    {
+      "name": "disk_size",
+      "type": "number",
+      "description": "Disk size in gigabytes per VM.",
+      "default": 20,
+      "required": false
+    },
+    {
+      "name": "storage_pool",
+      "type": "string",
+      "description": "Proxmox storage pool for VM disks.",
+      "default": "local-lvm",
+      "required": false
+    },
+    {
+      "name": "ip_config_base",
+      "type": "string",
+      "description": "Base IP config for sequential assignment. Use 'dhcp' or a CIDR prefix like '192.168.1.10' (index is added to last octet).",
+      "default": "dhcp",
+      "required": false
+    },
+    {
+      "name": "gateway",
+      "type": "string",
+      "description": "Default gateway IP. Required when ip_config_base is not 'dhcp'.",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "bridge",
+      "type": "string",
+      "description": "Network bridge to attach (e.g. vmbr0).",
+      "default": "vmbr0",
+      "required": false
+    },
+    {
+      "name": "ssh_public_key",
+      "type": "string",
+      "description": "SSH public key injected via cloud-init.",
+      "required": true
+    },
+    {
+      "name": "environment",
+      "type": "string",
+      "description": "Environment tag (e.g. dev, staging, prod).",
+      "default": "dev",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "proxmox/lxc-container",
+  "display_name": "Proxmox LXC Container",
+  "description": "Provisions a Proxmox LXC container with configurable network, storage, and resource allocation.",
+  "provider": "proxmox",
+  "version": "1.0.0",
+  "tags": ["proxmox", "lxc", "container", "linux"],
+  "author": "TerraBot"
+}

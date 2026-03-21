@@ -1,0 +1,85 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "{{ aws_region }}"
+}
+
+locals {
+  ssh_cidrs = split(",", "{{ allowed_ssh_cidrs }}")
+}
+
+# ---------------------------------------------------------------------------
+# Web server security group
+# ---------------------------------------------------------------------------
+
+resource "aws_security_group" "web" {
+  name        = "{{ name_prefix }}-web-sg"
+  description = "Allow HTTP, HTTPS, and SSH inbound traffic"
+  vpc_id      = "{{ vpc_id }}"
+
+  tags = {
+    Name        = "{{ name_prefix }}-web-sg"
+    Environment = "{{ environment }}"
+    ManagedBy   = "TerraBot"
+  }
+}
+
+# HTTP
+resource "aws_vpc_security_group_ingress_rule" "http" {
+  security_group_id = aws_security_group.web.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 80
+  to_port           = 80
+  ip_protocol       = "tcp"
+  description       = "Allow HTTP"
+}
+
+# HTTPS
+resource "aws_vpc_security_group_ingress_rule" "https" {
+  security_group_id = aws_security_group.web.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+  description       = "Allow HTTPS"
+}
+
+# SSH — one rule per allowed CIDR
+resource "aws_vpc_security_group_ingress_rule" "ssh" {
+  count             = length(local.ssh_cidrs)
+  security_group_id = aws_security_group.web.id
+  cidr_ipv4         = trimspace(local.ssh_cidrs[count.index])
+  from_port         = 22
+  to_port           = 22
+  ip_protocol       = "tcp"
+  description       = "Allow SSH from ${trimspace(local.ssh_cidrs[count.index])}"
+}
+
+# Unrestricted egress
+resource "aws_vpc_security_group_egress_rule" "all_outbound" {
+  security_group_id = aws_security_group.web.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  description       = "Allow all outbound traffic"
+}
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+
+output "security_group_id" {
+  description = "ID of the web security group."
+  value       = aws_security_group.web.id
+}
+
+output "security_group_name" {
+  description = "Name of the web security group."
+  value       = aws_security_group.web.name
+}

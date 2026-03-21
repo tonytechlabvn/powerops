@@ -1,0 +1,38 @@
+{
+  "variables": [
+    {
+      "name": "vpc_id",
+      "type": "string",
+      "description": "ID of the VPC in which to create the security group.",
+      "required": true
+    },
+    {
+      "name": "name_prefix",
+      "type": "string",
+      "description": "Prefix for the security group name and tags.",
+      "default": "web",
+      "required": false
+    },
+    {
+      "name": "allowed_ssh_cidrs",
+      "type": "string",
+      "description": "Comma-separated CIDR blocks allowed SSH (port 22) access. Use your IP for security.",
+      "default": "0.0.0.0/0",
+      "required": false
+    },
+    {
+      "name": "aws_region",
+      "type": "string",
+      "description": "AWS region (e.g. us-east-1).",
+      "default": "us-east-1",
+      "required": false
+    },
+    {
+      "name": "environment",
+      "type": "string",
+      "description": "Deployment environment tag (e.g. dev, staging, prod).",
+      "default": "dev",
+      "required": false
+    }
+  ]
+}

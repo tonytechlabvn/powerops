@@ -1,0 +1,9 @@
+{
+  "name": "aws/vpc-basic",
+  "display_name": "AWS VPC (Basic)",
+  "description": "VPC with public and private subnets, Internet Gateway, NAT Gateway, and route tables across multiple availability zones.",
+  "provider": "aws",
+  "version": "1.0.0",
+  "tags": ["aws", "vpc", "networking", "subnets"],
+  "author": "TerraBot"
+}

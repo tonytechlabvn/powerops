@@ -1,0 +1,93 @@
+{
+  "variables": [
+    {
+      "name": "proxmox_api_url",
+      "type": "string",
+      "description": "Proxmox API endpoint URL (e.g. https://proxmox.example.com:8006/api2/json).",
+      "required": true
+    },
+    {
+      "name": "proxmox_node",
+      "type": "string",
+      "description": "Proxmox node name where the VM will be created.",
+      "default": "pve",
+      "required": false
+    },
+    {
+      "name": "vm_id",
+      "type": "number",
+      "description": "Unique VM ID in Proxmox (100–999999).",
+      "default": 200,
+      "required": false
+    },
+    {
+      "name": "vm_name",
+      "type": "string",
+      "description": "VM hostname and Proxmox display name.",
+      "default": "ubuntu-vm",
+      "required": false
+    },
+    {
+      "name": "template_name",
+      "type": "string",
+      "description": "Name of the Proxmox VM template to clone (Ubuntu cloud-init image).",
+      "default": "ubuntu-22.04-cloudinit",
+      "required": false
+    },
+    {
+      "name": "cores",
+      "type": "number",
+      "description": "Number of vCPU cores.",
+      "default": 2,
+      "required": false
+    },
+    {
+      "name": "memory_mb",
+      "type": "number",
+      "description": "RAM allocation in megabytes.",
+      "default": 2048,
+      "required": false
+    },
+    {
+      "name": "disk_size_gb",
+      "type": "number",
+      "description": "Primary disk size in gigabytes.",
+      "default": 20,
+      "required": false
+    },
+    {
+      "name": "storage_pool",
+      "type": "string",
+      "description": "Proxmox storage pool for the VM disk.",
+      "default": "local-lvm",
+      "required": false
+    },
+    {
+      "name": "ip_address",
+      "type": "string",
+      "description": "Static IP address with CIDR prefix (e.g. 192.168.1.100/24). Use 'dhcp' for DHCP.",
+      "default": "dhcp",
+      "required": false
+    },
+    {
+      "name": "gateway",
+      "type": "string",
+      "description": "Default gateway IP. Required when ip_address is not 'dhcp'.",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "ssh_public_key",
+      "type": "string",
+      "description": "SSH public key injected via cloud-init for the default user.",
+      "required": true
+    },
+    {
+      "name": "environment",
+      "type": "string",
+      "description": "Environment tag (e.g. dev, staging, prod).",
+      "default": "dev",
+      "required": false
+    }
+  ]
+}

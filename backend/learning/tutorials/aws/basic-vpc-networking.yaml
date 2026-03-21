@@ -1,0 +1,82 @@
+name: basic-vpc-networking
+title: "Basic VPC Networking on AWS"
+provider: aws
+difficulty: beginner
+duration: "20min"
+template: aws/vpc-basic
+prerequisites: [your-first-ec2]
+concepts: [resource, variable, provider, plan, apply, output]
+description: >
+  Learn how AWS Virtual Private Clouds work by building one with Terraform.
+  You will create a VPC, public subnet, internet gateway, and route table —
+  the foundation for every production AWS environment.
+
+steps:
+  - id: 1
+    title: "Understand VPC Concepts"
+    explain: |
+      A VPC (Virtual Private Cloud) is a logically isolated network in AWS.
+      Key components you will create:
+        - VPC: the network boundary with a CIDR block (e.g. 10.0.0.0/16).
+        - Subnet: a subdivision of the VPC (e.g. 10.0.1.0/24).
+        - Internet Gateway (IGW): allows traffic to flow in/out of the VPC.
+        - Route Table: rules that direct traffic to the right destination.
+      Without these, resources in the VPC cannot reach the internet.
+    action: view_template
+    hint: "CIDR notation like 10.0.0.0/16 means the first 16 bits are fixed — giving you 65,536 addresses."
+
+  - id: 2
+    title: "Configure Subnets"
+    explain: |
+      Subnets divide your VPC address space into smaller segments.
+      A public subnet routes traffic through the IGW (internet-accessible).
+      A private subnet has no direct internet route (for databases, backends).
+      For this tutorial you will create one public subnet.
+      Set these variables:
+        - vpc_cidr: the VPC address range (e.g. "10.0.0.0/16").
+        - subnet_cidr: must be within the VPC CIDR (e.g. "10.0.1.0/24").
+        - region: AWS region (e.g. "us-east-1").
+        - availability_zone: the AZ for your subnet (e.g. "us-east-1a").
+    action: set_variables
+    required_vars:
+      - vpc_cidr
+      - subnet_cidr
+      - region
+      - availability_zone
+    hint: "Subnet CIDR must be a subset of vpc_cidr."
+
+  - id: 3
+    title: "Run Terraform Plan"
+    explain: |
+      Run 'terraform plan' to preview the network resources.
+      You should see 4 resources being created:
+        1. aws_vpc
+        2. aws_subnet
+        3. aws_internet_gateway
+        4. aws_route_table + aws_route_table_association
+      Review each resource's attributes, especially cidr_block values.
+    action: run_plan
+    hint: "The plan output shows attribute values that will be set after apply."
+
+  - id: 4
+    title: "Apply and Observe"
+    explain: |
+      Apply the configuration to create the VPC infrastructure.
+      After apply, note the output values:
+        - vpc_id: used when creating resources inside this VPC.
+        - subnet_id: used when launching EC2 instances.
+      These IDs are how AWS identifies your network resources.
+    action: run_apply
+    hint: "VPC resources are created quickly — usually under 30 seconds."
+
+  - id: 5
+    title: "Verify Networking"
+    explain: |
+      Verify your VPC in the AWS Console:
+        1. Navigate to VPC → Your VPCs and find your new VPC by its CIDR.
+        2. Check Subnets and confirm the subnet is in the correct AZ.
+        3. Check Internet Gateways and confirm it is attached to your VPC.
+        4. Check Route Tables and confirm a route to 0.0.0.0/0 via the IGW.
+      Then run 'terraform destroy' to remove all resources.
+    action: verify_and_destroy
+    hint: "The route 0.0.0.0/0 → igw-xxx is what makes a subnet 'public'."

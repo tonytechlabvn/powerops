@@ -1,0 +1,1 @@
+"""TerraBot FastAPI application package."""

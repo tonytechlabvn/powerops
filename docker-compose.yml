@@ -1,0 +1,19 @@
+services:
+  powerops:
+    build: .
+    container_name: powerops
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - TERRABOT_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TERRABOT_DB_URL=sqlite+aiosqlite:///./data/powerops.db
+      - TERRABOT_WORKING_DIR=/app/workspaces
+      - TERRABOT_TEMPLATE_DIR=/app/templates
+    volumes:
+      - powerops-data:/app/data
+      - powerops-workspaces:/app/workspaces
+
+volumes:
+  powerops-data:
+  powerops-workspaces:

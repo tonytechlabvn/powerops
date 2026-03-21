@@ -1,0 +1,164 @@
+"""FastAPI application factory.
+
+Creates the app with CORS, middleware, all routers, and lifespan hooks
+for database initialisation and teardown.
+"""
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+from backend.core.config import get_settings
+from backend.core.exceptions import TerrabotError
+from backend.db.database import close_db, init_db
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Kebab-case module loader (mirrors pattern from core/__init__.py)
+# ---------------------------------------------------------------------------
+
+import importlib.util as _ilu
+import sys as _sys
+from pathlib import Path as _Path
+
+_API_DIR = _Path(__file__).parent
+
+
+def _load(rel_path: str, alias: str):
+    """Load a kebab-case module relative to the api package directory."""
+    full_name = f"backend.api.{alias}"
+    if full_name in _sys.modules:
+        return _sys.modules[full_name]
+    spec = _ilu.spec_from_file_location(full_name, _API_DIR / rel_path)
+    mod = _ilu.module_from_spec(spec)  # type: ignore[arg-type]
+    _sys.modules[full_name] = mod
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+# Load kebab-case service modules
+_load("services/job-service.py", "services.job_service")
+_load("services/approval-service.py", "services.approval_service")
+_load("services/stream-service.py", "services.stream_service")
+
+# Load kebab-case schema modules
+_load("schemas/request-schemas.py", "schemas.request_schemas")
+_load("schemas/response-schemas.py", "schemas.response_schemas")
+
+# Load middleware modules
+_error_handler = _load("middleware/error-handler.py", "middleware.error_handler")
+_audit_mw      = _load("middleware/audit-middleware.py", "middleware.audit_middleware")
+_auth_mw       = _load("middleware/auth-middleware.py", "middleware.auth_middleware")
+
+# Load route modules — original
+_health_routes   = _load("routes/health-routes.py",   "routes.health_routes")
+_job_routes      = _load("routes/job-routes.py",       "routes.job_routes")
+_template_routes = _load("routes/template-routes.py",  "routes.template_routes")
+_terraform_routes = _load("routes/terraform-routes.py","routes.terraform_routes")
+_approval_routes = _load("routes/approval-routes.py",  "routes.approval_routes")
+_config_routes   = _load("routes/config-routes.py",    "routes.config_routes")
+_stream_routes   = _load("routes/stream-routes.py",    "routes.stream_routes")
+
+# Load route modules — Phase 7 advanced features
+_drift_routes     = _load("routes/drift-routes.py",     "routes.drift_routes")
+_workspace_routes = _load("routes/workspace-routes.py", "routes.workspace_routes")
+_import_routes    = _load("routes/import-routes.py",    "routes.import_routes")
+
+
+# ---------------------------------------------------------------------------
+# Lifespan
+# ---------------------------------------------------------------------------
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: initialise DB. Shutdown: close connection pool."""
+    logger.info("TerraBot API starting up...")
+    await init_db()
+    logger.info("Database ready.")
+    yield
+    logger.info("TerraBot API shutting down...")
+    await close_db()
+
+
+# ---------------------------------------------------------------------------
+# Application factory
+# ---------------------------------------------------------------------------
+
+
+def create_app() -> FastAPI:
+    """Build and return the configured FastAPI application."""
+    settings = get_settings()
+
+    app = FastAPI(
+        title="TerraBot API",
+        description="AI-powered Terraform automation platform",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+
+    # CORS — allow frontend dev server + any configured origins
+    cors_origins = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Auth middleware (runs before audit so user identity is available)
+    app.add_middleware(_auth_mw.AuthMiddleware)
+
+    # Audit logging middleware
+    app.add_middleware(_audit_mw.AuditMiddleware)
+
+    # Global exception handlers
+    app.add_exception_handler(TerrabotError, _error_handler.terrabot_exception_handler)
+    app.add_exception_handler(ValueError, _error_handler.value_error_handler)
+    app.add_exception_handler(Exception, _error_handler.unhandled_exception_handler)
+
+    # Register all routers — original
+    app.include_router(_health_routes.router)
+    app.include_router(_job_routes.router)
+    app.include_router(_template_routes.router)
+    app.include_router(_terraform_routes.router)
+    app.include_router(_approval_routes.router)
+    app.include_router(_config_routes.router)
+    app.include_router(_stream_routes.router)
+
+    # Register Phase 7 routers
+    app.include_router(_drift_routes.router)
+    app.include_router(_workspace_routes.router)
+    app.include_router(_import_routes.router)
+
+    # Serve frontend static files in production (built React app at /app/static)
+    static_dir = Path(__file__).parent.parent.parent / "static"
+    if static_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def serve_spa(full_path: str):
+            """Serve React SPA for all non-API routes."""
+            file_path = static_dir / full_path
+            if file_path.is_file():
+                return FileResponse(file_path)
+            return FileResponse(static_dir / "index.html")
+
+    return app
+
+
+# Module-level app instance for uvicorn
+app = create_app()
