@@ -1,7 +1,7 @@
 // Card displaying a single Terraform template with provider, tags, and deploy action
 
 import { Link } from 'react-router-dom'
-import { Tag, DollarSign } from 'lucide-react'
+import { Tag, DollarSign, Zap } from 'lucide-react'
 import type { Template } from '../../types/api-types'
 
 interface TemplateCardProps {
@@ -9,14 +9,24 @@ interface TemplateCardProps {
 }
 
 export function TemplateCard({ template }: TemplateCardProps) {
+  const isAutoMode = template.tags.includes('auto-mode')
+
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 flex flex-col gap-3 hover:border-zinc-700 transition-colors">
-      {/* Provider badge + name */}
+      {/* Provider badge + auto-mode badge + name */}
       <div className="flex items-start justify-between gap-2">
         <div>
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-            {template.provider}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+              {template.provider}
+            </span>
+            {isAutoMode && (
+              <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                <Zap size={10} />
+                Auto Mode
+              </span>
+            )}
+          </div>
           <h3 className="text-base font-semibold text-zinc-100 mt-2">{template.name}</h3>
         </div>
       </div>

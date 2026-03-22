@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, HelpCircle, BookOpen, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, HelpCircle, BookOpen, ChevronDown, ChevronUp, Zap } from 'lucide-react'
 import { usePlanMutation } from '../../hooks/use-api'
 import type { Template, TemplateVariable } from '../../types/api-types'
 import { VARIABLE_GUIDES } from './variable-guides'
@@ -146,9 +146,34 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
   }
 
   const hasGuides = template.variables.some(v => VARIABLE_GUIDES[v.name])
+  const isAutoMode = template.tags.includes('auto-mode')
+  const isAwsSide = template.name.includes('aws-side')
+  const isProxmoxSide = template.name.includes('proxmox-side')
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Auto Mode banner */}
+      {isAutoMode && (
+        <div className="bg-green-600/10 border border-green-500/30 rounded-md p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <Zap size={16} className="text-green-400" />
+            <span className="text-sm font-semibold text-green-300">Auto Mode</span>
+          </div>
+          {isAwsSide && (
+            <div className="text-xs text-zinc-300 space-y-1">
+              <p>This template <strong>auto-generates all WireGuard keys</strong> (server + client). No manual key generation needed.</p>
+              <p className="text-zinc-400">After deploy, copy the <code className="bg-zinc-800 px-1 rounded">proxmox_side_config</code> output values to the Proxmox-side template.</p>
+            </div>
+          )}
+          {isProxmoxSide && (
+            <div className="text-xs text-zinc-300 space-y-1">
+              <p>This template receives keys from the <strong>AWS-side template outputs</strong>. Deploy AWS side first.</p>
+              <p className="text-zinc-400">Proxmox API URL is loaded from <code className="bg-zinc-800 px-1 rounded">var.proxmox_url</code> (project credentials).</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Beginner tip banner */}
       <div className="bg-zinc-800 border border-zinc-700 rounded-md p-3 flex items-start gap-2">
         <BookOpen size={16} className="text-blue-400 mt-0.5 shrink-0" />
