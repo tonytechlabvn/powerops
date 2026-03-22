@@ -68,8 +68,7 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
-    ports:
-      - "8180:8080"
+      KC_HTTP_RELATIVE_PATH: /auth
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     networks:
@@ -125,11 +124,11 @@ services:
       - TERRABOT_GITHUB_APP_ID=${GITHUB_APP_ID:-0}
       - TERRABOT_GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
       - TERRABOT_OPA_URL=http://opa:8181
-      - TERRABOT_KEYCLOAK_URL=http://keycloak:8080
+      - TERRABOT_KEYCLOAK_URL=http://keycloak:8080/auth
       - TERRABOT_KEYCLOAK_REALM=powerops
       - TERRABOT_KEYCLOAK_CLIENT_ID=powerops-api
       - TERRABOT_KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-}
-      - TERRABOT_KEYCLOAK_PUBLIC_URL=${TERRABOT_KEYCLOAK_PUBLIC_URL:-}
+      - TERRABOT_KEYCLOAK_PUBLIC_URL=https://powerops.tonytechlab.com/auth
     volumes:
       - powerops-data:/app/data
       - powerops-workspaces:/app/workspaces

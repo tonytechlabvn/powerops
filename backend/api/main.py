@@ -240,6 +240,38 @@ def create_app() -> FastAPI:
     # Phase 6: HCP Terraform Cloud
     app.include_router(_tfc_routes.router)
 
+    # Keycloak reverse proxy — single-domain setup
+    # Routes /auth/* to internal Keycloak container so browser never hits raw IP
+    import httpx as _httpx
+
+    # Base URL is the raw Keycloak host (without /auth path) since we forward full /auth/* path
+    _kc_base = settings.keycloak_url.replace("/auth", "").rstrip("/")
+    _keycloak_client = _httpx.AsyncClient(base_url=_kc_base, timeout=30.0)
+
+    @app.api_route("/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], include_in_schema=False)
+    async def keycloak_proxy(path: str, request: Request):
+        """Reverse proxy all /auth/* requests to Keycloak."""
+        from starlette.responses import Response as StarletteResponse
+        url = f"/auth/{path}"
+        if request.url.query:
+            url = f"{url}?{request.url.query}"
+        body = await request.body()
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        try:
+            resp = await _keycloak_client.request(
+                method=request.method, url=url,
+                content=body, headers=headers,
+            )
+            excluded = {"transfer-encoding", "content-encoding", "content-length"}
+            resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
+            return StarletteResponse(
+                content=resp.content, status_code=resp.status_code, headers=resp_headers,
+            )
+        except Exception as exc:
+            logger.error("Keycloak proxy error: %s", exc)
+            return JSONResponse(status_code=502, content={"detail": "Keycloak unavailable"})
+
     # Serve frontend static files in production (built React app at /app/static)
     static_dir = Path(__file__).parent.parent.parent / "static"
     if static_dir.is_dir():

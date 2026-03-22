@@ -34,6 +34,7 @@ _PUBLIC_EXACT: frozenset[str] = frozenset([
 # Prefix-based public paths
 _PUBLIC_PREFIXES: tuple[str, ...] = (
     "/api/webhooks/",
+    "/auth/",
     "/docs/",
     "/redoc/",
 )
