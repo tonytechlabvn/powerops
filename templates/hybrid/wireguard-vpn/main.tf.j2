@@ -2,6 +2,7 @@
 # Environment: {{ environment }}
 # Mode: {% if auto_mode | default(true) %}AUTO (keys auto-generated){% else %}MANUAL (keys provided){% endif %}
 # Architecture: Proxmox VM (on-premise) + AWS EC2, connected via WireGuard VPN
+# NOTE: SSH keys + WireGuard keys stored in Terraform state. Use encrypted backend (S3+KMS).
 
 terraform {
   required_version = ">= 1.5.0"
@@ -291,6 +292,7 @@ resource "proxmox_vm_qemu" "wireguard_client" {
   }
 
   os_type   = "cloud-init"
+  ciuser    = "{{ proxmox_ssh_user | default('ubuntu') }}"
   ipconfig0 = {% if proxmox_vm_ip == "dhcp" %}"ip=dhcp"{% else %}"ip={{ proxmox_vm_ip }}{% if proxmox_vm_gateway %},gw={{ proxmox_vm_gateway }}{% endif %}"{% endif %}
 
   sshkeys = <<-EOT
