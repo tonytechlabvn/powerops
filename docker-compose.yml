@@ -128,7 +128,8 @@ services:
       - TERRABOT_KEYCLOAK_URL=http://keycloak:8080
       - TERRABOT_KEYCLOAK_REALM=powerops
       - TERRABOT_KEYCLOAK_CLIENT_ID=powerops-api
-      - TERRABOT_KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-powerops-api-secret}
+      - TERRABOT_KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-}
+      - TERRABOT_KEYCLOAK_PUBLIC_URL=${TERRABOT_KEYCLOAK_PUBLIC_URL:-}
     volumes:
       - powerops-data:/app/data
       - powerops-workspaces:/app/workspaces
