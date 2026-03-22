@@ -23,6 +23,11 @@ import { ModuleRegistryPage } from './components/registry/module-registry-page'
 import { ModuleDetailPage } from './components/registry/module-detail-page'
 import { StackComposerPage } from './components/stacks/stack-composer-page'
 import { AIModuleGeneratorPage } from './components/registry/ai-module-generator-page'
+import { KBLandingPage } from './components/kb/kb-landing-page'
+import { KBChapterPage } from './components/kb/kb-chapter-page'
+import { KBQuizPage } from './components/kb/kb-quiz-page'
+import { KBLabPage } from './components/kb/kb-lab-page'
+import { KBLeaderboardPage } from './components/kb/kb-leaderboard-page'
 
 function ProtectedRoutes() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -60,6 +65,11 @@ function ProtectedRoutes() {
         <Route path="registry/:moduleId" element={<ModuleDetailPage />} />
         <Route path="stacks" element={<StackComposerPage />} />
         <Route path="modules/generate" element={<AIModuleGeneratorPage />} />
+        <Route path="kb" element={<KBLandingPage />} />
+        <Route path="kb/:slug" element={<KBChapterPage />} />
+        <Route path="kb/:slug/quiz" element={<KBQuizPage />} />
+        <Route path="kb/:slug/lab" element={<KBLabPage />} />
+        <Route path="kb/leaderboard" element={<KBLeaderboardPage />} />
         <Route path="config" element={<ProviderConfigPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

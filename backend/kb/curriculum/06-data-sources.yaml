@@ -1,0 +1,349 @@
+name: data-sources
+title: "Data Sources"
+order: 6
+difficulty: intermediate
+estimated_minutes: 25
+prerequisites:
+  - iac-intro
+  - hcl-syntax
+  - providers-init
+  - resources
+  - variables-outputs
+concepts:
+  - data source
+powerops_features: []
+description: |
+  Learn how to use data sources to query existing infrastructure for read-only
+  information, and understand when to use a data source versus a resource.
+
+content:
+  sections:
+    - title: "What are Data Sources"
+      body: |
+        A data source lets Terraform read information from an existing resource that
+        is not managed by your current configuration. Unlike a resource block — which
+        creates and manages infrastructure — a data block only reads. It never creates,
+        updates, or deletes anything.
+
+        Think of data sources as queries. You ask your cloud provider: "What is the
+        ID of the latest Amazon Linux 2 AMI?" or "What is the ARN of the IAM role
+        named my-deploy-role?" The provider looks it up and returns the answer.
+        Terraform stores that answer as a data object you can reference anywhere
+        in your configuration.
+
+        Data sources solve a critical practical problem: in a real organisation,
+        not everything is managed by the same Terraform configuration. A networking
+        team may manage VPCs and subnets in their own configuration. Your application
+        team needs to launch EC2 instances into those subnets, but you don't own
+        the VPC code. A data source lets you look up the subnet IDs dynamically
+        rather than hardcoding values that might change.
+
+        Common data source use cases:
+          - Look up the latest AMI ID for a given OS (AMI IDs change when new versions release)
+          - Find an existing VPC or subnet by tag or name
+          - Retrieve an IAM role ARN that was created by another team
+          - Get the current AWS account ID or region
+          - Read an existing Route 53 zone to add records to it
+      hcl_example: |
+        # Data source syntax: data "<TYPE>" "<NAME>" { ... }
+        # Like resources, TYPE comes from the provider, NAME is your local identifier
+
+        # Look up the current AWS account identity
+        data "aws_caller_identity" "current" {}
+
+        # Use the data source result anywhere
+        output "account_id" {
+          value = data.aws_caller_identity.current.account_id
+        }
+
+    - title: "Data vs Resource"
+      body: |
+        Understanding the difference between data and resource blocks is fundamental.
+        The key question to ask is: should Terraform own this object's lifecycle?
+
+        Use a resource block when:
+          - You want Terraform to create the object
+          - You want Terraform to update it when your configuration changes
+          - You want Terraform to delete it when you remove the block or run destroy
+          - The object does not yet exist
+
+        Use a data block when:
+          - The object already exists and is managed elsewhere
+          - You need its attributes but don't want to manage its lifecycle
+          - You are reading dynamic values like the latest AMI ID
+          - Creating the object would be wrong (e.g., reading a shared production VPC)
+
+        Confusing the two causes real problems. If you accidentally use a resource
+        block for something that already exists (like a shared VPC), Terraform will
+        try to create a duplicate — or fail because the name is already taken.
+        If you use a data block for something you intend to manage, Terraform won't
+        create it and will error when it can't find it.
+
+        A helpful mental model: resource blocks are write operations with lifecycle
+        management. Data blocks are read operations with no side effects.
+
+        Both resources and data sources expose attributes you can reference. The
+        difference is in the reference syntax: resource attributes are referenced
+        as resource_type.name.attribute, while data source attributes are referenced
+        as data.data_type.name.attribute.
+      hcl_example: |
+        # RESOURCE: Terraform creates and owns this VPC
+        resource "aws_vpc" "app" {
+          cidr_block = "10.0.0.0/16"
+        }
+        # Reference: aws_vpc.app.id
+
+        # DATA SOURCE: Read an existing VPC created by the networking team
+        data "aws_vpc" "shared" {
+          filter {
+            name   = "tag:Name"
+            values = ["shared-network-vpc"]
+          }
+        }
+        # Reference: data.aws_vpc.shared.id
+
+        resource "aws_subnet" "app" {
+          vpc_id     = data.aws_vpc.shared.id  # Use the looked-up VPC ID
+          cidr_block = "10.0.10.0/24"
+        }
+
+    - title: "Common Data Sources"
+      body: |
+        Most Terraform providers ship with a rich set of data sources. Here are
+        the most commonly used ones you'll encounter when working with AWS.
+
+        aws_ami: Look up an Amazon Machine Image (AMI) by owner, OS, and filters.
+        AMI IDs are region-specific and change when new versions are released.
+        Always use a data source to find the latest AMI rather than hardcoding IDs.
+
+        aws_caller_identity: Returns the AWS account ID, user ID, and ARN of the
+        credentials Terraform is using. Useful for constructing ARNs dynamically
+        or for tagging resources with the deploying account ID.
+
+        aws_region: Returns the current AWS region. Use this instead of hardcoding
+        the region string in resource definitions.
+
+        aws_vpc: Look up an existing VPC by ID, tag, or CIDR block.
+
+        aws_subnet / aws_subnets: Find a specific subnet or all subnets matching
+        certain criteria (e.g., all private subnets in a VPC).
+
+        aws_security_group: Look up an existing security group by name or tag.
+
+        aws_iam_role / aws_iam_policy: Find existing IAM roles and policies to
+        attach to new resources without recreating them.
+
+        aws_route53_zone: Look up a hosted zone to add DNS records to it.
+
+        These data sources all follow the same pattern: declare the data block
+        with filter criteria, then reference data.type.name.attribute.
+      hcl_example: |
+        # Look up the latest Amazon Linux 2023 AMI in the current region
+        data "aws_ami" "amazon_linux" {
+          most_recent = true
+          owners      = ["amazon"]
+
+          filter {
+            name   = "name"
+            values = ["al2023-ami-*-x86_64"]
+          }
+
+          filter {
+            name   = "virtualization-type"
+            values = ["hvm"]
+          }
+        }
+
+        # Use the AMI in a resource
+        resource "aws_instance" "web" {
+          ami           = data.aws_ami.amazon_linux.id
+          instance_type = "t3.micro"
+        }
+
+    - title: "Filtering"
+      body: |
+        Most data sources accept filter blocks or direct attribute lookups to
+        narrow down which existing resource to return. Understanding how to use
+        filters effectively is key to writing reliable data source queries.
+
+        Direct attribute lookup: Some data sources let you specify an id or name
+        directly. For example, data "aws_vpc" "main" { id = "vpc-12345678" }.
+        This is precise but fragile — hardcoded IDs break when environments differ.
+
+        Filter blocks: Filters let you query by resource properties. A filter has
+        a name (the property to filter on) and a values list (acceptable values).
+        Multiple filters are ANDed together — a resource must match all filters.
+        Within a single filter, multiple values are ORed.
+
+        Tag-based filtering: The most portable pattern is filtering by tags.
+        Tags like Environment = "production" and Team = "platform" are consistent
+        across accounts and regions. Tag-based lookups work even when resource IDs
+        differ between environments.
+
+        The most_recent argument: Available on aws_ami and some other data sources,
+        most_recent = true returns the newest result when multiple resources match
+        the filters. Without it, Terraform errors if more than one result is found.
+
+        When a data source finds zero matching resources, Terraform errors during
+        plan. Write your filters carefully and test them with the AWS CLI first:
+        aws ec2 describe-images --filters Name=name,Values="al2023-ami-*-x86_64"
+      hcl_example: |
+        # Find all private subnets in a shared VPC using tag filtering
+        data "aws_subnets" "private" {
+          filter {
+            name   = "vpc-id"
+            values = [data.aws_vpc.shared.id]
+          }
+
+          filter {
+            name   = "tag:Tier"
+            values = ["private"]
+          }
+        }
+
+        # data.aws_subnets.private.ids returns a list of subnet IDs
+        resource "aws_instance" "app" {
+          ami           = data.aws_ami.amazon_linux.id
+          instance_type = "t3.micro"
+          subnet_id     = data.aws_subnets.private.ids[0]
+        }
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "What is the fundamental difference between a data block and a resource block?"
+      options:
+        - "Data blocks only work with AWS; resource blocks work with any provider"
+        - "A data block reads existing infrastructure without managing its lifecycle; a resource block creates and manages infrastructure"
+        - "Data blocks run after resource blocks in every apply"
+        - "A resource block is read-only; a data block creates infrastructure"
+      correct: 1
+      explanation: |
+        Data blocks are read-only queries — they never create, update, or delete
+        anything. Resource blocks create and own the full lifecycle of infrastructure.
+
+    - id: 2
+      type: multiple_choice
+      question: "How do you reference an attribute from a data source named 'main' of type 'aws_vpc'?"
+      options:
+        - "aws_vpc.main.id"
+        - "data.aws_vpc.main.id"
+        - "var.aws_vpc.main.id"
+        - "source.aws_vpc.main.id"
+      correct: 1
+      explanation: |
+        Data source attributes are referenced with the data prefix:
+        data.<TYPE>.<NAME>.<ATTRIBUTE>. Resources omit the data prefix.
+
+    - id: 3
+      type: true_false
+      question: "Running terraform apply with only data sources in the configuration will create new cloud resources."
+      correct: false
+      explanation: |
+        Data sources are read-only. An apply that contains only data blocks will
+        query existing resources but create nothing new.
+
+    - id: 4
+      type: multiple_choice
+      question: "Why should you use a data source to look up AMI IDs instead of hardcoding them?"
+      options:
+        - "Hardcoded AMI IDs are not valid HCL syntax"
+        - "AMI IDs are region-specific and change when new versions are released; data sources find the current correct ID dynamically"
+        - "AWS does not allow AMI IDs to be used in Terraform configurations"
+        - "Data sources are faster than hardcoded values"
+      correct: 1
+      explanation: |
+        AMI IDs differ by region and change when new OS versions are released.
+        A data source with filters like most_recent = true always returns the
+        current correct ID for the target environment.
+
+    - id: 5
+      type: multiple_choice
+      question: "What happens if a data source filter matches zero existing resources?"
+      options:
+        - "Terraform creates a new resource matching the filter criteria"
+        - "Terraform returns null for the data source attributes"
+        - "Terraform errors during plan because no matching resource was found"
+        - "Terraform skips resources that reference the data source"
+      correct: 2
+      explanation: |
+        If a data source finds no matching resources, Terraform raises an error
+        during plan. Make sure your filter criteria are correct and the resource
+        actually exists before running plan.
+
+    - id: 6
+      type: true_false
+      question: "Multiple filter blocks on a data source are evaluated with OR logic (any filter can match)."
+      correct: false
+      explanation: |
+        Multiple filter blocks are ANDed — a resource must satisfy ALL filters to
+        be returned. Within a single filter, multiple values in the values list
+        are ORed.
+
+lab:
+  title: "Use aws_ami Data Source to Find the Latest Ubuntu AMI"
+  description: |
+    Practice writing a data source query to find the most recent Ubuntu 22.04
+    LTS AMI published by Canonical, then use it in an EC2 resource.
+  instructions: |
+    1. Write a data "aws_ami" "ubuntu" block with:
+       - most_recent = true
+       - owners = ["099720109477"]  (Canonical's AWS account ID)
+       - A filter for name matching "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+       - A filter for virtualization-type = "hvm"
+    2. Write an aws_instance resource named "web" that uses:
+       - ami = data.aws_ami.ubuntu.id
+       - instance_type = "t3.micro"
+    3. Add an output "ami_id" that returns data.aws_ami.ubuntu.id with a description.
+    4. Add an output "ami_name" that returns data.aws_ami.ubuntu.name.
+  starter_hcl: |
+    data "aws_ami" "ubuntu" {
+      most_recent = true
+      owners      = [""]  # Fill in: Canonical's account ID 099720109477
+
+      filter {
+        name   = "name"
+        values = [""]  # Fill in: ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*
+      }
+
+      filter {
+        name   = "virtualization-type"
+        values = [""]  # Fill in: hvm
+      }
+    }
+
+    resource "aws_instance" "web" {
+      ami           = ""  # Reference the data source
+      instance_type = "t3.micro"
+    }
+
+    output "ami_id" {
+      value       = ""  # Reference data.aws_ami.ubuntu.id
+      description = ""  # Write a description
+    }
+
+    output "ami_name" {
+      value = ""  # Reference data.aws_ami.ubuntu.name
+    }
+  validation:
+    patterns:
+      - pattern: "data\\s+\"aws_ami\"\\s+\"ubuntu\""
+        message: "Declare a data source of type aws_ami named ubuntu"
+      - pattern: "most_recent\\s*=\\s*true"
+        message: "Set most_recent = true to get the latest matching AMI"
+      - pattern: "owners\\s*=\\s*\\[\"099720109477\"\\]"
+        message: "Set owners to Canonical's account ID: [\"099720109477\"]"
+      - pattern: "ami\\s*=\\s*data\\.aws_ami\\.ubuntu\\.id"
+        message: "Set the EC2 ami argument to data.aws_ami.ubuntu.id"
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this data source configuration for finding an Ubuntu AMI. Check that
+      the filter criteria are specific enough to reliably return a single AMI,
+      that the data source is correctly referenced in the resource, and that the
+      outputs are useful and well-described. Suggest improvements.
+  hints:
+    - "Data source reference syntax: data.<type>.<name>.<attribute> — e.g., data.aws_ami.ubuntu.id"
+    - "The owners list restricts results to AMIs published by that account — Canonical's ID is 099720109477"
+    - "Use a wildcard (*) in the name filter value to match the version suffix that changes with each release"

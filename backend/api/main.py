@@ -147,6 +147,10 @@ _plan_analysis_routes   = _load("routes/plan-analysis-routes.py",     "routes.pl
 _remediation_routes     = _load("routes/remediation-routes.py",       "routes.remediation_routes")
 _module_gen_routes      = _load("routes/module-generator-routes.py",  "routes.module_generator_routes")
 
+# Phase 12: Knowledge Base
+_kb_schemas = _load("schemas/kb-schemas.py", "schemas.kb_schemas")
+_kb_routes  = _load("routes/kb-routes.py",   "routes.kb_routes")
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -305,6 +309,9 @@ def create_app() -> FastAPI:
     app.include_router(_plan_analysis_routes.router)
     app.include_router(_remediation_routes.router)
     app.include_router(_module_gen_routes.router)
+
+    # Phase 12: Knowledge Base
+    app.include_router(_kb_routes.router)
 
     # Terraform Registry service discovery (Phase 5)
     @app.get("/.well-known/terraform.json", include_in_schema=False)

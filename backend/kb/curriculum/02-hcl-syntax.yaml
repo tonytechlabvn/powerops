@@ -1,0 +1,329 @@
+name: hcl-syntax
+title: "HCL Basics"
+order: 2
+difficulty: beginner
+estimated_minutes: 20
+prerequisites:
+  - iac-intro
+concepts:
+  - terraform block
+powerops_features: []
+description: |
+  Learn HashiCorp Configuration Language (HCL) — Terraform's native syntax.
+  Understand blocks, attributes, expressions, and formatting conventions.
+
+content:
+  sections:
+    - title: "HCL Basics"
+      body: |
+        HashiCorp Configuration Language (HCL) is the language you use to write
+        Terraform configurations. It was designed to be human-readable and easy to
+        write, while still being machine-parseable. If you've written JSON or YAML
+        before, HCL will feel familiar — but it's cleaner and less verbose.
+
+        HCL files use the .tf extension. Terraform reads all .tf files in a directory
+        and merges them into a single configuration. This means you can split your
+        configuration across multiple files for organisation without any special imports.
+
+        The fundamental unit of HCL is a block. A block has a type, optional labels,
+        and a body enclosed in curly braces. Inside the body, you assign values to
+        attributes using the equals sign.
+
+        Here is the simplest possible HCL structure:
+
+            block_type "label" {
+              attribute = "value"
+            }
+
+        Everything in Terraform — resources, providers, variables, outputs — is
+        expressed as some form of block. Once you understand how blocks work, the
+        entire Terraform language becomes navigable.
+
+        HCL is not a general-purpose programming language. It has no loops in the
+        traditional sense, no class system, and limited control flow. This is by design:
+        infrastructure configuration should be predictable and easy to read, not
+        a complex program that requires deep expertise to understand.
+      hcl_example: |
+        # A simple HCL block with an attribute
+        terraform {
+          required_version = ">= 1.5.0"
+        }
+
+    - title: "Block Types"
+      body: |
+        Terraform defines several built-in block types, each with a specific purpose.
+        You will encounter these constantly, so it's worth knowing what each one does
+        before you start writing configurations.
+
+        terraform block: The top-level configuration block for Terraform itself.
+        Use it to set the minimum required Terraform version and declare provider
+        requirements. There should be exactly one terraform block per configuration.
+
+        provider block: Configures a specific provider plugin, such as AWS or Azure.
+        You set authentication credentials, default regions, and other provider-level
+        settings here.
+
+        resource block: Declares a piece of infrastructure you want Terraform to
+        manage. This is the most common block type. Every EC2 instance, S3 bucket,
+        and database you manage will be a resource block.
+
+        variable block: Declares an input variable, making your configuration
+        reusable and parameterised. Instead of hardcoding a region, you use a variable.
+
+        output block: Declares a value that Terraform will print after apply and
+        make available to other configurations. Use outputs to expose IP addresses,
+        ARNs, and other computed values.
+
+        data block: Queries existing infrastructure for read-only information.
+        Use a data block when you need to look up an existing resource's ID rather
+        than creating a new one.
+
+        locals block: Defines local values — named expressions computed within the
+        configuration. Locals help you avoid repeating the same expression in
+        multiple places.
+      hcl_example: |
+        # terraform block — one per configuration
+        terraform {
+          required_version = ">= 1.5.0"
+          required_providers {
+            aws = {
+              source  = "hashicorp/aws"
+              version = "~> 5.0"
+            }
+          }
+        }
+
+        # provider block — configures the AWS provider
+        provider "aws" {
+          region = "us-east-1"
+        }
+
+        # resource block — creates an S3 bucket
+        resource "aws_s3_bucket" "example" {
+          bucket = "my-example-bucket"
+        }
+
+    - title: "Expressions"
+      body: |
+        Attributes in HCL are assigned expressions, not just literal values. An
+        expression can be a string literal, a number, a boolean, a reference to
+        another value, or a complex computed value.
+
+        Literal types: HCL supports strings (in double quotes), numbers (integers
+        and floats), and booleans (true or false). Strings use double quotes — single
+        quotes are not valid HCL.
+
+        String interpolation: You can embed expressions inside strings using the
+        ${...} syntax. For example, "Hello, ${var.name}!" inserts the value of the
+        variable "name" into the string.
+
+        References: You refer to other values using dot notation. var.region refers
+        to an input variable named region. aws_instance.web.public_ip refers to the
+        public_ip attribute of a resource named web. These references create implicit
+        dependencies that Terraform uses to determine the correct order of operations.
+
+        Functions: HCL includes a library of built-in functions for common operations
+        like string manipulation, list operations, and type conversion. For example,
+        upper("hello") returns "HELLO", and length(["a", "b", "c"]) returns 3.
+
+        Type system: Values in HCL have types — string, number, bool, list, map,
+        and object are the most common. Terraform will often convert between compatible
+        types automatically, but being explicit about types in variable definitions
+        is considered good practice.
+      hcl_example: |
+        variable "environment" {
+          type    = string
+          default = "dev"
+        }
+
+        resource "aws_s3_bucket" "example" {
+          # String interpolation with ${}
+          bucket = "my-app-${var.environment}-data"
+
+          tags = {
+            Environment = var.environment
+            Name        = "App Data Bucket"
+            ManagedBy   = "terraform"
+          }
+        }
+
+        # Reference another resource's attribute
+        output "bucket_arn" {
+          value = aws_s3_bucket.example.arn
+        }
+
+    - title: "Comments & Formatting"
+      body: |
+        Writing readable HCL is as important as writing correct HCL. Your teammates
+        (and future you) will thank you for consistent formatting and clear comments.
+
+        Comments: HCL supports two comment styles. Single-line comments start with #
+        (preferred) or //. Multi-line comments use /* ... */ syntax. Use comments to
+        explain WHY a configuration decision was made, not just what it does — the
+        code itself describes what it does.
+
+        Formatting: Terraform ships with a built-in formatter: terraform fmt.
+        Running this command automatically reformats your .tf files to the canonical
+        Terraform style. This handles indentation (two spaces), alignment of equals
+        signs in attribute blocks, and consistent spacing. You should run terraform fmt
+        before every commit.
+
+        Naming conventions: Resource names, variable names, and output names use
+        snake_case (underscores, not hyphens). Be descriptive but concise. A resource
+        named web_server is better than srv1.
+
+        File organisation: Split your configuration into logical files.
+        A common convention is:
+          main.tf      — resource definitions
+          variables.tf — variable declarations
+          outputs.tf   — output declarations
+          providers.tf — provider and terraform blocks
+
+        This is a convention, not a requirement — Terraform merges all .tf files in
+        a directory regardless of their names. But following conventions makes your
+        code immediately understandable to other Terraform practitioners.
+      hcl_example: |
+        # variables.tf
+        variable "instance_type" {
+          type        = string
+          description = "EC2 instance size — use t3.micro for dev, m5.large for prod"
+          default     = "t3.micro"
+        }
+
+        # main.tf
+        # We use a dedicated security group per service to follow
+        # the principle of least privilege for network access.
+        resource "aws_security_group" "web" {
+          name        = "web-sg"
+          description = "Allow inbound HTTP and HTTPS traffic"
+
+          ingress {
+            from_port   = 80
+            to_port     = 80
+            protocol    = "tcp"
+            cidr_blocks = ["0.0.0.0/0"]
+          }
+        }
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "Which file extension do Terraform configuration files use?"
+      options:
+        - ".hcl"
+        - ".tf"
+        - ".terraform"
+        - ".yaml"
+      correct: 1
+      explanation: |
+        Terraform configuration files use the .tf extension. Terraform reads all
+        .tf files in the working directory and merges them automatically.
+
+    - id: 2
+      type: multiple_choice
+      question: "In HCL, what syntax is used for string interpolation?"
+      options:
+        - "{{variable_name}}"
+        - "$(variable_name)"
+        - "${expression}"
+        - "%{expression}"
+      correct: 2
+      explanation: |
+        HCL uses ${...} for string interpolation. For example, "Hello, ${var.name}!"
+        embeds the value of the variable into the string.
+
+    - id: 3
+      type: true_false
+      question: "Terraform configuration must all be written in a single .tf file."
+      correct: false
+      explanation: |
+        Terraform reads all .tf files in the working directory and merges them.
+        You can (and should) split your configuration across multiple files for organisation.
+
+    - id: 4
+      type: multiple_choice
+      question: "What does the 'terraform fmt' command do?"
+      options:
+        - "Validates the syntax of your configuration files"
+        - "Automatically reformats .tf files to the canonical Terraform style"
+        - "Initialises the working directory with provider plugins"
+        - "Applies formatting changes to your cloud resources"
+      correct: 1
+      explanation: |
+        'terraform fmt' reformats .tf files in place using the canonical Terraform
+        style — consistent indentation, spacing, and alignment.
+
+    - id: 5
+      type: multiple_choice
+      question: "Which block type declares a piece of infrastructure for Terraform to manage?"
+      options:
+        - "variable"
+        - "output"
+        - "resource"
+        - "locals"
+      correct: 2
+      explanation: |
+        The 'resource' block is the most common block type. It declares a piece of
+        infrastructure (EC2 instance, S3 bucket, etc.) that Terraform should create
+        and manage.
+
+    - id: 6
+      type: true_false
+      question: "Single quotes are valid for string values in HCL."
+      correct: false
+      explanation: |
+        HCL requires double quotes for string values. Single quotes are not valid
+        HCL syntax and will cause a parse error.
+
+lab:
+  title: "Write Your First terraform{} Block"
+  description: |
+    Practice writing valid HCL by creating a terraform configuration block
+    that specifies the minimum required Terraform version and declares
+    the AWS provider as a dependency.
+  instructions: |
+    1. Write a terraform{} block that requires Terraform version >= 1.5.0.
+    2. Inside the terraform{} block, add a required_providers{} block.
+    3. Inside required_providers{}, declare the AWS provider:
+       - source: "hashicorp/aws"
+       - version: "~> 5.0"
+    4. Below the terraform{} block, write a provider "aws" {} block
+       that sets the region to "us-east-1".
+    5. Run terraform fmt to check your formatting.
+  starter_hcl: |
+    terraform {
+      required_version = ""  # Fill in: >= 1.5.0
+
+      required_providers {
+        aws = {
+          source  = ""  # Fill in: hashicorp/aws
+          version = ""  # Fill in: ~> 5.0
+        }
+      }
+    }
+
+    provider "aws" {
+      region = ""  # Fill in: us-east-1
+    }
+  validation:
+    patterns:
+      - pattern: "required_version\\s*=\\s*\">= 1\\.5\\.0\""
+        message: "Set required_version to \">= 1.5.0\" in the terraform block"
+      - pattern: "source\\s*=\\s*\"hashicorp/aws\""
+        message: "Set the AWS provider source to \"hashicorp/aws\""
+      - pattern: "version\\s*=\\s*\"~> 5\\.0\""
+        message: "Set the AWS provider version constraint to \"~> 5.0\""
+      - pattern: "region\\s*=\\s*\"us-east-1\""
+        message: "Set the AWS provider region to \"us-east-1\""
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this terraform{} block written by a beginner. Check that the block
+      structure is correct, the version constraint syntax is valid, and the provider
+      declaration follows HCL conventions. Provide specific feedback on any issues
+      and praise correct elements.
+  hints:
+    - "The required_version value is a string — remember to wrap it in double quotes"
+    - "required_providers is a nested block inside terraform{} — use proper indentation (2 spaces)"
+    - "The provider block label must match the name used in required_providers (e.g., provider \"aws\")"

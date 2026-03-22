@@ -17,6 +17,7 @@ import {
   Package,
   Boxes,
   Bot,
+  GraduationCap,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { setAccessToken } from '../../services/api-client'
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { to: '/variable-sets',  label: 'Variables',      icon: Variable },
   { to: '/templates',      label: 'Templates',      icon: FileCode2 },
   { to: '/modules/generate', label: 'AI Generator', icon: Bot },
+  { to: '/kb',               label: 'Knowledge Base', icon: GraduationCap },
   { to: '/jobs',           label: 'Jobs',            icon: BriefcaseBusiness },
   { to: '/approvals',      label: 'Approvals',      icon: CheckSquare },
   { to: '/state',          label: 'State',           icon: Database },

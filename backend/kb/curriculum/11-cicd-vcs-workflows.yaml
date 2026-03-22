@@ -1,0 +1,190 @@
+name: cicd-vcs-workflows
+title: "CI/CD & VCS Workflows"
+order: 11
+difficulty: advanced
+estimated_minutes: 30
+prerequisites:
+  - iac-intro
+  - hcl-syntax
+  - providers-init
+  - resources
+  - variables-outputs
+  - data-sources
+  - state-management
+  - modules
+  - meta-arguments
+  - workspaces-environments
+concepts: []
+powerops_features:
+  - vcs-workflow
+description: >
+  Automate Terraform workflows with CI/CD pipelines, VCS integration,
+  plan-on-push, apply-on-merge, and approval gates.
+
+content:
+  sections:
+    - title: "Why CI/CD for Terraform?"
+      body: |
+        Running Terraform manually on your laptop works for learning, but teams
+        need automation. CI/CD for Terraform provides:
+
+        Consistency — every change goes through the same pipeline. No more
+        "works on my machine" issues with different Terraform or provider versions.
+
+        Audit trail — every plan and apply is logged with who triggered it and what changed.
+
+        Safety — automated checks (linting, policy evaluation, plan review) catch
+        mistakes before they reach production infrastructure.
+
+        Speed — merging a pull request can automatically apply infrastructure changes
+        without manual intervention.
+      hcl_example: null
+
+    - title: "Plan on Push"
+      body: |
+        The most common pattern: when a developer pushes a commit or opens a pull request,
+        the CI pipeline runs terraform plan and posts the output as a PR comment.
+
+        Reviewers can see exactly what infrastructure changes the code would make
+        before approving the merge. This is similar to running unit tests on code changes.
+
+        The plan output shows additions (+), modifications (~), and deletions (-)
+        so the team can evaluate the blast radius of each change.
+      hcl_example: null
+
+    - title: "Apply on Merge"
+      body: |
+        After the PR is reviewed and approved, merging to the main branch triggers
+        terraform apply. This ensures that only reviewed, approved changes are applied.
+
+        Some teams use auto-apply (apply immediately after merge) while others require
+        an additional manual approval step for production environments.
+
+        The key principle: the main branch always reflects the actual state of
+        your infrastructure. If it is in main, it is applied.
+      hcl_example: null
+
+    - title: "Approval Workflows"
+      body: |
+        For production environments, you often want human approval between plan and apply.
+        This can be implemented as:
+
+        Manual gates — a team lead must click "Approve" in the CI/CD dashboard.
+        Policy checks — automated OPA/Sentinel policies evaluate the plan and block
+        non-compliant changes.
+        Cost estimation — show estimated cost impact before approval.
+
+        Different environments can have different approval requirements: auto-apply
+        for dev, one approval for staging, two approvals for production.
+      hcl_example: null
+
+    - title: "PowerOps VCS Integration"
+      body: |
+        PowerOps provides built-in VCS integration via its GitHub App. When you
+        connect a repository to a workspace:
+
+        Push events trigger automatic plan runs. PR comments show plan output.
+        Merge to the configured branch triggers apply. Status checks block merge
+        if the plan fails or policies are violated.
+
+        This eliminates the need to build custom CI/CD pipelines — PowerOps
+        handles the entire workflow from push to apply.
+      hcl_example: null
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "What is the primary benefit of CI/CD for Terraform?"
+      options:
+        - "It makes Terraform run faster"
+        - "It ensures consistent, auditable, and reviewed infrastructure changes"
+        - "It eliminates the need for state files"
+        - "It allows you to skip terraform init"
+      correct: 1
+      explanation: "CI/CD provides consistency, audit trails, and review processes for infrastructure changes."
+    - id: 2
+      type: true_false
+      question: "In a plan-on-push workflow, terraform apply runs when a PR is opened."
+      correct: false
+      explanation: "Plan-on-push runs terraform plan, not apply. Apply typically runs after merge."
+    - id: 3
+      type: multiple_choice
+      question: "When does terraform apply typically run in a VCS workflow?"
+      options:
+        - "When a branch is created"
+        - "When a PR is opened"
+        - "When the PR is merged to the main branch"
+        - "When a file is saved"
+      correct: 2
+      explanation: "Apply-on-merge ensures only reviewed and approved changes are applied to infrastructure."
+    - id: 4
+      type: true_false
+      question: "Auto-apply is recommended for all environments including production."
+      correct: false
+      explanation: "Production typically requires manual approval gates. Auto-apply is more suitable for dev/staging."
+    - id: 5
+      type: multiple_choice
+      question: "What do policy checks evaluate in an approval workflow?"
+      options:
+        - "Code formatting only"
+        - "The terraform plan output against compliance rules"
+        - "Git commit messages"
+        - "Developer permissions"
+      correct: 1
+      explanation: "Policy checks (OPA/Sentinel) evaluate the planned changes against organizational rules."
+    - id: 6
+      type: multiple_choice
+      question: "What triggers a plan run in PowerOps VCS integration?"
+      options:
+        - "A cron job"
+        - "Manual button click only"
+        - "Push events and pull requests via GitHub webhook"
+        - "Email notification"
+      correct: 2
+      explanation: "PowerOps GitHub App uses webhooks to trigger plan runs on push and PR events."
+    - id: 7
+      type: true_false
+      question: "The main branch should always reflect the actual state of deployed infrastructure."
+      correct: true
+      explanation: "In a proper GitOps workflow, the main branch is the source of truth for infrastructure state."
+
+lab:
+  title: "Design a VCS Workflow Configuration"
+  description: "Write a conceptual Terraform configuration for VCS-driven workflows."
+  instructions: |
+    1. Write a terraform block with backend configuration for remote state (S3)
+    2. Add a comment block describing your VCS workflow:
+       - What triggers a plan? (push/PR)
+       - What triggers an apply? (merge to main)
+       - What approval gates exist?
+    3. Define a variable for the environment name
+    4. Use the environment variable in a resource tag
+  starter_hcl: |
+    # VCS Workflow Configuration
+    # TODO: Add terraform block with S3 backend
+
+    # TODO: Document your VCS workflow in comments
+    # Trigger: ...
+    # Plan: ...
+    # Apply: ...
+    # Approval: ...
+
+    # TODO: Define environment variable
+
+    # TODO: Create a resource using the environment variable
+  validation:
+    patterns:
+      - pattern: 'backend\s+"s3"'
+        message: "Must configure S3 backend for remote state"
+      - pattern: 'variable\s+"environment"'
+        message: "Must define an environment variable"
+      - pattern: '#.*[Tt]rigger|#.*[Pp]lan|#.*[Aa]pply'
+        message: "Must document VCS workflow in comments"
+    terraform_validate: false
+    ai_review_prompt: "Check that the configuration describes a VCS workflow with backend config and environment variable usage."
+  hints:
+    - "Use backend \"s3\" { bucket = \"...\" key = \"...\" region = \"...\" } in the terraform block"
+    - "Add comments explaining: push triggers plan, merge triggers apply"
+    - "Define variable \"environment\" { type = string default = \"dev\" }"

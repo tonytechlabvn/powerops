@@ -1,0 +1,420 @@
+name: variables-outputs
+title: "Variables, Outputs & Locals"
+order: 5
+difficulty: intermediate
+estimated_minutes: 30
+prerequisites:
+  - iac-intro
+  - hcl-syntax
+  - providers-init
+  - resources
+concepts:
+  - variable
+  - output
+  - locals
+powerops_features:
+  - variable-sets
+description: |
+  Master input variables, output values, and local expressions to make your
+  Terraform configurations reusable, composable, and free of repetition.
+
+content:
+  sections:
+    - title: "Input Variables"
+      body: |
+        Input variables are the parameters of your Terraform configuration. They let
+        you customise behaviour without modifying the source code — the same
+        configuration can deploy to dev, staging, and production just by changing
+        variable values.
+
+        A variable block declares a variable. The block label is the variable's name.
+        Inside the block you can set:
+
+        type: The expected data type. Common types are string, number, bool, list(string),
+        map(string), and object({...}). Declaring a type lets Terraform catch mistakes
+        early — if you pass a number where a string is expected, Terraform errors before
+        touching any infrastructure.
+
+        description: A human-readable explanation of what the variable controls.
+        Always write a description — it appears in terraform plan output and in
+        generated documentation.
+
+        default: A fallback value used when the variable is not explicitly provided.
+        If you omit default, the variable is required and Terraform will error
+        (or prompt interactively) if it's not supplied.
+
+        sensitive: Setting sensitive = true tells Terraform to redact this variable's
+        value from plan and apply output. Use this for passwords, API keys, and any
+        secret values. Note: sensitive = true does NOT encrypt the value in the state
+        file — use a secrets manager for storage.
+
+        validation: A block containing a condition expression and error_message.
+        Terraform evaluates the condition and surfaces the error_message if it is
+        false. Use validations to enforce allowed values (e.g., only accept specific
+        AWS regions).
+      hcl_example: |
+        variable "instance_type" {
+          type        = string
+          description = "EC2 instance size to deploy"
+          default     = "t3.micro"
+
+          validation {
+            condition     = contains(["t3.micro", "t3.small", "t3.medium"], var.instance_type)
+            error_message = "instance_type must be t3.micro, t3.small, or t3.medium."
+          }
+        }
+
+        variable "db_password" {
+          type        = string
+          description = "Master password for the RDS instance"
+          sensitive   = true
+          # No default — must be provided explicitly
+        }
+
+        variable "tags" {
+          type = map(string)
+          description = "Tags to apply to all resources"
+          default = {
+            ManagedBy = "terraform"
+          }
+        }
+
+    - title: "Type Constraints"
+      body: |
+        Terraform's type system catches configuration errors before they reach
+        your cloud provider. Understanding the available types lets you write
+        safer, more self-documenting configurations.
+
+        Primitive types: The simplest types.
+          string — a sequence of characters: "us-east-1", "t3.micro"
+          number — integer or float: 3, 0.5
+          bool   — true or false
+
+        Collection types: Hold multiple values of the same type.
+          list(string)  — ordered sequence: ["us-east-1", "us-west-2"]
+          set(string)   — unordered, unique values: good for security group rules
+          map(string)   — key-value pairs with string values: {"env": "prod"}
+
+        Structural types: Hold values of different types.
+          object({...}) — a structured object with named attributes of specified types
+          tuple([...])  — a fixed-length sequence with per-position type constraints
+
+        The any type tells Terraform to accept any type. Avoid it where possible —
+        explicit types catch bugs earlier.
+
+        When you assign a value to a typed variable, Terraform attempts automatic
+        type conversion. For example, the string "42" will be automatically converted
+        to the number 42 if the variable expects a number. When conversion is
+        impossible, Terraform raises a type mismatch error.
+      hcl_example: |
+        variable "availability_zones" {
+          type        = list(string)
+          description = "List of AZs to spread resources across"
+          default     = ["us-east-1a", "us-east-1b"]
+        }
+
+        variable "network_config" {
+          type = object({
+            vpc_cidr    = string
+            enable_nat  = bool
+            max_az_count = number
+          })
+          description = "VPC network configuration"
+          default = {
+            vpc_cidr     = "10.0.0.0/16"
+            enable_nat   = true
+            max_az_count = 3
+          }
+        }
+
+    - title: "Variable Precedence"
+      body: |
+        Terraform accepts variable values from multiple sources. When the same
+        variable is set in multiple places, Terraform uses the following precedence
+        order (later sources override earlier ones):
+
+        1. Default values in the variable block (lowest priority)
+        2. terraform.tfvars or terraform.tfvars.json files (loaded automatically)
+        3. *.auto.tfvars or *.auto.tfvars.json files (loaded automatically, alphabetical)
+        4. -var-file=filename flags on the command line
+        5. -var="name=value" flags on the command line
+        6. Environment variables prefixed with TF_VAR_ (e.g., TF_VAR_region)
+        7. Interactive prompt (when running Terraform interactively and no value found)
+
+        In practice, the most common pattern is:
+          - Set sensible defaults in the variable block for development
+          - Use terraform.tfvars for local overrides (add to .gitignore for sensitive vars)
+          - Use environment variables (TF_VAR_*) or -var-file in CI/CD pipelines
+
+        The terraform.tfvars file is a simple key = value file. It's the most
+        convenient way to set many variables at once without passing dozens of
+        -var flags on the command line.
+      hcl_example: |
+        # terraform.tfvars (not committed to git if it contains secrets)
+        instance_type = "t3.small"
+        db_password   = "s3cr3t-p@ssw0rd"
+
+        # Environment variable approach (CI/CD friendly):
+        # export TF_VAR_instance_type="t3.small"
+        # export TF_VAR_db_password="s3cr3t-p@ssw0rd"
+
+        # Command-line flag (useful for one-off overrides):
+        # terraform apply -var="instance_type=t3.large"
+
+    - title: "Output Values"
+      body: |
+        Output values let your Terraform configuration expose information to the
+        outside world: to the operator running the CLI, to other Terraform
+        configurations that use this one as a module, and to scripts in your
+        CI/CD pipeline.
+
+        An output block has a label (the output name) and a value argument.
+        The value is any expression — typically a reference to a resource attribute
+        computed during apply.
+
+        Outputs are printed to the terminal after terraform apply completes. You
+        can also query them at any time with terraform output or
+        terraform output <name> for a specific value.
+
+        The sensitive = true argument on an output suppresses the value from being
+        printed in the terminal. However, the value is still stored in state and
+        accessible via terraform output -json.
+
+        The description argument documents what the output represents — write one
+        for every output, especially outputs that will be consumed by other modules.
+
+        In module composition (covered in the Modules chapter), outputs are the
+        only way to pass data from a child module back to the parent. This makes
+        outputs a critical part of the module interface contract.
+      hcl_example: |
+        resource "aws_instance" "web" {
+          ami           = "ami-0c55b159cbfafe1f0"
+          instance_type = var.instance_type
+        }
+
+        output "web_public_ip" {
+          value       = aws_instance.web.public_ip
+          description = "Public IPv4 address of the web server"
+        }
+
+        output "web_instance_id" {
+          value       = aws_instance.web.id
+          description = "EC2 instance ID for use in scripts or other configurations"
+        }
+
+        output "db_connection_string" {
+          value       = "postgresql://${aws_db_instance.main.endpoint}/appdb"
+          description = "Full connection string for the application database"
+          sensitive   = true
+        }
+
+    - title: "Local Values"
+      body: |
+        Local values (declared with a locals block) let you assign a name to an
+        expression and reuse it multiple places without repeating the expression.
+        Locals are like constants or computed variables local to your configuration.
+
+        Unlike input variables, locals cannot be set from outside — they are purely
+        internal to the module. This makes them ideal for computed values derived
+        from other variables or for building common tag maps that are reused across
+        many resources.
+
+        A locals block can contain multiple local values. There is no limit on the
+        number of locals blocks in a configuration. You reference a local value
+        using local.name (note: local, not locals).
+
+        Common use cases for locals:
+          - Building a common tags map with computed values (date, account ID)
+          - Constructing a name prefix used across many resources
+          - Simplifying complex expressions used in multiple places
+          - Computing a value once that depends on multiple inputs
+
+        Overusing locals can make code harder to follow — if the expression is only
+        used once, it's often clearer to use it inline rather than extracting it
+        to a local. Apply the DRY principle: extract to a local when the same
+        expression appears two or more times.
+      hcl_example: |
+        locals {
+          # Build a standard name prefix used across all resources
+          name_prefix = "${var.project}-${var.environment}"
+
+          # Common tags merged onto every resource
+          common_tags = {
+            Project     = var.project
+            Environment = var.environment
+            ManagedBy   = "terraform"
+            CreatedBy   = data.aws_caller_identity.current.arn
+          }
+        }
+
+        resource "aws_s3_bucket" "logs" {
+          bucket = "${local.name_prefix}-logs"
+          tags   = local.common_tags
+        }
+
+        resource "aws_s3_bucket" "data" {
+          bucket = "${local.name_prefix}-data"
+          tags   = local.common_tags
+        }
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "What happens when you declare a variable without a 'default' value?"
+      options:
+        - "Terraform uses an empty string as the default"
+        - "Terraform errors immediately during init"
+        - "The variable is required — Terraform will prompt for it or error if not provided"
+        - "Terraform skips any resource that references the variable"
+      correct: 2
+      explanation: |
+        A variable with no default is required. When running non-interactively (e.g.,
+        in CI/CD), Terraform errors if it cannot find the value. Interactively, it
+        prompts the user.
+
+    - id: 2
+      type: multiple_choice
+      question: "What does setting sensitive = true on a variable do?"
+      options:
+        - "Encrypts the value in the state file"
+        - "Prevents the value from appearing in plan and apply terminal output"
+        - "Restricts which IAM roles can set the variable"
+        - "Both A and B"
+      correct: 1
+      explanation: |
+        sensitive = true redacts the value from CLI output. It does NOT encrypt
+        the value in the state file — for secure storage you need a secrets manager
+        like HashiCorp Vault or AWS Secrets Manager.
+
+    - id: 3
+      type: multiple_choice
+      question: "Which variable source has the highest precedence?"
+      options:
+        - "Default value in the variable block"
+        - "terraform.tfvars file"
+        - "-var flag on the command line"
+        - "TF_VAR_ environment variable"
+      correct: 2
+      explanation: |
+        Command-line -var flags have the highest precedence among the automatic
+        sources, overriding defaults, tfvars files, and environment variables.
+
+    - id: 4
+      type: true_false
+      question: "You can reference a local value using locals.name_prefix."
+      correct: false
+      explanation: |
+        Local values are referenced using local.name (singular), not locals.name.
+        The block type is locals (plural) but the reference prefix is local (singular).
+
+    - id: 5
+      type: multiple_choice
+      question: "What is the primary use case for output values?"
+      options:
+        - "To set default values for variables"
+        - "To expose computed resource attributes to operators, scripts, and parent modules"
+        - "To define local expressions reused within the configuration"
+        - "To configure provider authentication"
+      correct: 1
+      explanation: |
+        Outputs expose information after apply — printed to the terminal, queryable
+        via terraform output, and passed to parent modules. They are the public
+        interface of a module.
+
+    - id: 6
+      type: multiple_choice
+      question: "Which type constraint should you use for a variable that accepts a list of strings?"
+      options:
+        - "type = string[]"
+        - "type = array(string)"
+        - "type = list(string)"
+        - "type = [string]"
+      correct: 2
+      explanation: |
+        HCL uses list(string) for an ordered collection of strings. The other
+        syntaxes (string[], array(), [string]) are not valid HCL.
+
+    - id: 7
+      type: true_false
+      question: "A locals block can contain multiple local values at once."
+      correct: true
+      explanation: |
+        A single locals block can define any number of local values. You can also
+        have multiple locals blocks in the same configuration — Terraform merges them.
+
+lab:
+  title: "Parameterise an EC2 Instance with Variables and Output the Public IP"
+  description: |
+    Write a reusable EC2 configuration using input variables for the key
+    parameters, a locals block for a name prefix, and an output for the
+    public IP address.
+  instructions: |
+    1. Declare the following input variables:
+       - instance_type (string, default "t3.micro")
+       - environment (string, default "dev")
+       - project_name (string, no default — required)
+    2. Add a locals block that defines name_prefix = "${var.project_name}-${var.environment}".
+    3. Write an aws_instance resource named "app" with:
+       - ami = "ami-0c55b159cbfafe1f0"
+       - instance_type = var.instance_type
+       - A tags block using local.name_prefix for the Name tag and var.environment for Environment
+    4. Add an output named "app_public_ip" that returns the instance's public_ip,
+       with a description.
+  starter_hcl: |
+    variable "project_name" {
+      type        = string
+      description = ""  # Fill in
+      # No default — this is required
+    }
+
+    variable "environment" {
+      type    = string
+      default = "dev"
+    }
+
+    variable "instance_type" {
+      type    = string
+      default = "t3.micro"
+    }
+
+    locals {
+      name_prefix = ""  # Build from var.project_name and var.environment
+    }
+
+    resource "aws_instance" "app" {
+      ami           = "ami-0c55b159cbfafe1f0"
+      instance_type = ""  # Reference the variable
+
+      tags = {
+        Name        = ""  # Use local.name_prefix
+        Environment = ""  # Reference the variable
+        ManagedBy   = "terraform"
+      }
+    }
+
+    output "app_public_ip" {
+      value       = ""  # Reference the resource attribute
+      description = ""  # Write a description
+    }
+  validation:
+    patterns:
+      - pattern: "variable\\s+\"project_name\""
+        message: "Declare a required variable named project_name (no default)"
+      - pattern: "name_prefix\\s*=\\s*\"\\$\\{var\\.project_name\\}-\\$\\{var\\.environment\\}\""
+        message: "Set name_prefix local to \"${var.project_name}-${var.environment}\""
+      - pattern: "instance_type\\s*=\\s*var\\.instance_type"
+        message: "Reference var.instance_type in the aws_instance resource"
+      - pattern: "output\\s+\"app_public_ip\""
+        message: "Declare an output named app_public_ip"
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this EC2 variable/output configuration. Check that variables have
+      proper types and descriptions, the locals block is used effectively,
+      the resource references variables and locals correctly, and the output
+      provides a useful description. Suggest any improvements.
+  hints:
+    - "A required variable has no 'default' argument at all — just omit the default line"
+    - "Reference a local with local.name_prefix (singular local, not locals)"
+    - "The public IP attribute on aws_instance is: aws_instance.app.public_ip"

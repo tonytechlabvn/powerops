@@ -1,0 +1,398 @@
+name: resources
+title: "Resources"
+order: 4
+difficulty: beginner
+estimated_minutes: 30
+prerequisites:
+  - iac-intro
+  - hcl-syntax
+  - providers-init
+concepts:
+  - resource
+  - plan
+  - apply
+  - destroy
+powerops_features:
+  - workspace-editor
+  - plan-viewer
+description: |
+  Learn how to declare resources — the core building blocks of Terraform — and
+  understand the full lifecycle of plan, apply, and destroy.
+
+content:
+  sections:
+    - title: "What is a Resource"
+      body: |
+        A resource is the most important concept in Terraform. A resource represents
+        a single piece of infrastructure that Terraform manages: an EC2 instance,
+        an S3 bucket, a DNS record, a Kubernetes deployment, a GitHub repository —
+        anything that can be created, read, updated, or deleted via an API.
+
+        Every resource block has two labels: the resource type and the resource name.
+        The type comes from the provider and tells Terraform what kind of object to
+        create. The name is a local identifier you choose — it's used to reference
+        this resource elsewhere in your configuration.
+
+        The combination of type and name must be unique within a module.
+        Terraform uses this pair as the resource's identity in the state file.
+
+        Resource arguments are the configuration values you set inside the block.
+        Some are required (Terraform will error if you omit them), and some are
+        optional with sensible defaults. The provider's documentation lists every
+        available argument for each resource type — reading that documentation is
+        a core Terraform skill.
+
+        After Terraform creates a resource, the provider exposes additional
+        read-only values called attributes (sometimes called exported attributes
+        or computed attributes). For example, an aws_instance resource exposes its
+        public_ip, private_ip, and arn after it's created. You can reference
+        these in other parts of your configuration.
+      hcl_example: |
+        # resource "<TYPE>" "<NAME>" { ... }
+        # TYPE  = provider resource type (e.g., aws_s3_bucket)
+        # NAME  = your local name for this resource (e.g., app_data)
+
+        resource "aws_s3_bucket" "app_data" {
+          bucket = "my-app-data-bucket-2024"
+
+          tags = {
+            Name        = "App Data"
+            Environment = "production"
+            ManagedBy   = "terraform"
+          }
+        }
+
+        # Reference the bucket's computed ARN in an output
+        output "bucket_arn" {
+          value = aws_s3_bucket.app_data.arn
+        }
+
+    - title: "Resource Lifecycle"
+      body: |
+        Terraform manages resources through a lifecycle of four operations that map
+        directly to the CRUD model: Create, Read, Update, and Delete.
+
+        Create: When a resource block exists in your configuration but not in the
+        state file, Terraform creates it. This happens on the first apply and any
+        time you add a new resource block.
+
+        Read (Refresh): Before planning changes, Terraform calls the provider's
+        read API for each managed resource to check its current real-world state.
+        If someone manually changed a resource outside of Terraform (configuration
+        drift), the refresh detects the discrepancy.
+
+        Update: When a resource exists in both the configuration and the state but
+        the configuration has changed, Terraform updates it. Some changes can be
+        made in-place (the resource keeps the same ID). Other changes require
+        destroying and recreating the resource — Terraform calls these "replacement"
+        changes and highlights them prominently in the plan output.
+
+        Delete: When a resource block is removed from the configuration, Terraform
+        deletes the real resource on the next apply. This also happens with
+        terraform destroy, which deletes all resources in the state.
+
+        Understanding which changes trigger replacement versus in-place update is
+        important. For example, renaming an S3 bucket requires replacement (the old
+        bucket is deleted, a new one is created), while updating bucket tags is an
+        in-place update. The plan output always tells you which will happen before
+        you commit to an apply.
+      hcl_example: |
+        resource "aws_instance" "web" {
+          ami           = "ami-0c55b159cbfafe1f0"
+          instance_type = "t3.micro"
+
+          tags = {
+            Name = "web-server"
+          }
+        }
+
+        # Changing 'tags' -> in-place update (no replacement)
+        # Changing 'ami'  -> replacement (old instance destroyed, new one created)
+        # Changing 'instance_type' -> depends on the instance; may require stop/start
+
+    - title: "terraform plan"
+      body: |
+        terraform plan is your safety net. It compares your configuration (what you
+        want) against the current state (what exists) and produces an execution plan
+        showing exactly what changes Terraform will make.
+
+        Running plan never modifies any real infrastructure. It's completely safe to
+        run as many times as you like. Think of it as a dry run.
+
+        Reading plan output: Terraform uses symbols to indicate the type of change
+        each resource will undergo:
+          + (green)  — resource will be created
+          - (red)    — resource will be destroyed
+          ~ (yellow) — resource will be updated in-place
+          -/+ (red)  — resource will be destroyed and recreated (replacement)
+          <= (cyan)  — data source will be read
+
+        At the bottom, the plan shows a summary line:
+          Plan: 3 to add, 1 to change, 0 to destroy.
+
+        Read this summary carefully before every apply. Unexpected destroys are the
+        most dangerous outcome — if you see resources being destroyed that you didn't
+        intend to remove, investigate before proceeding.
+
+        You can save a plan to a file with terraform plan -out=tfplan and then
+        apply exactly that saved plan with terraform apply tfplan. This is the
+        recommended pattern for CI/CD pipelines: plan in one stage, get approval,
+        apply the saved plan in the next stage. This guarantees that what was
+        reviewed is exactly what gets applied.
+      hcl_example: |
+        # Example plan output (abbreviated):
+        #
+        # Terraform will perform the following actions:
+        #
+        #   # aws_s3_bucket.app_data will be created
+        #   + resource "aws_s3_bucket" "app_data" {
+        #       + bucket = "my-app-data-bucket-2024"
+        #       + id     = (known after apply)
+        #       + arn    = (known after apply)
+        #
+        #       + tags = {
+        #           + "Environment" = "production"
+        #           + "ManagedBy"   = "terraform"
+        #           + "Name"        = "App Data"
+        #         }
+        #     }
+        #
+        # Plan: 1 to add, 0 to change, 0 to destroy.
+
+    - title: "terraform apply"
+      body: |
+        terraform apply executes the planned changes and makes them real. By default,
+        it generates a fresh plan, shows it to you, and asks for confirmation before
+        proceeding. Type "yes" at the prompt to confirm.
+
+        During apply, Terraform creates resources in the correct order based on
+        dependencies. If resource B references an attribute from resource A (like
+        an instance's subnet_id), Terraform automatically creates A before B.
+        You don't need to manually manage the order.
+
+        After apply completes, Terraform updates the state file to reflect the new
+        reality. The state file is the record of what Terraform manages — treat it
+        as critical infrastructure. If the state file is lost, Terraform loses track
+        of what it created and can no longer manage those resources.
+
+        Outputs declared in your configuration are printed at the end of a successful
+        apply. This is where you'll see the public IP of your new server, the URL of
+        your load balancer, or the ARN of your new IAM role.
+
+        For automation (CI/CD), use terraform apply -auto-approve to skip the
+        interactive confirmation prompt. Only use this when you have a reviewed,
+        saved plan file and appropriate guard rails in place.
+      hcl_example: |
+        # Apply with interactive confirmation (standard usage):
+        # $ terraform apply
+        #
+        # Apply a previously saved plan (CI/CD usage):
+        # $ terraform plan -out=tfplan
+        # $ terraform apply tfplan   # no confirmation prompt needed
+        #
+        # Apply with auto-approval (use with caution):
+        # $ terraform apply -auto-approve
+
+    - title: "terraform destroy"
+      body: |
+        terraform destroy is the inverse of apply — it deletes all resources that
+        Terraform manages in the current working directory (as recorded in the state
+        file). Like apply, it shows a plan first and asks for confirmation.
+
+        Destroy is most commonly used to clean up temporary environments: tear down
+        a development environment at the end of the day, remove a test stack after
+        CI passes, or clean up an experiment that's no longer needed.
+
+        Important: terraform destroy deletes EVERYTHING in the state. This includes
+        databases, storage buckets, and any data they contain. Always review the
+        destroy plan carefully and make sure you have backups of any data you care about.
+
+        You can destroy a single resource (instead of everything) using the -target
+        flag: terraform destroy -target=aws_s3_bucket.app_data. Use -target sparingly
+        — it can leave your state in an inconsistent condition if other resources
+        depend on the targeted one.
+
+        A common alternative to destroy for permanent environments is to simply
+        remove the resource block from your configuration and run apply.
+        Terraform will destroy only that specific resource on the next apply,
+        leaving everything else intact.
+      hcl_example: |
+        # Destroy all managed resources (interactive confirmation):
+        # $ terraform destroy
+        #
+        # Destroy a specific resource only:
+        # $ terraform destroy -target=aws_s3_bucket.app_data
+        #
+        # Example destroy plan output:
+        #
+        #   # aws_s3_bucket.app_data will be destroyed
+        #   - resource "aws_s3_bucket" "app_data" {
+        #       - bucket = "my-app-data-bucket-2024" -> null
+        #       - arn    = "arn:aws:s3:::my-app-data-bucket-2024" -> null
+        #     }
+        #
+        # Plan: 0 to add, 0 to change, 1 to destroy.
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "In a resource block, what do the two labels represent?"
+      options:
+        - "The cloud provider name and the region"
+        - "The resource type and the local resource name"
+        - "The resource name and the resource ID from the cloud provider"
+        - "The module name and the resource type"
+      correct: 1
+      explanation: |
+        A resource block has two labels: the type (e.g., aws_s3_bucket) which comes
+        from the provider, and the local name (e.g., app_data) which you choose
+        to reference the resource elsewhere in your configuration.
+
+    - id: 2
+      type: multiple_choice
+      question: "What symbol in terraform plan output indicates a resource will be destroyed and recreated?"
+      options:
+        - "~ (tilde)"
+        - "+ (plus)"
+        - "-/+ (minus-slash-plus)"
+        - "<= (less-than-equals)"
+      correct: 2
+      explanation: |
+        -/+ indicates a replacement — the resource will be destroyed and then
+        recreated. This is more disruptive than an in-place update (~) because
+        it causes downtime and the resource gets a new ID.
+
+    - id: 3
+      type: true_false
+      question: "Running terraform plan modifies real infrastructure."
+      correct: false
+      explanation: |
+        terraform plan is a read-only dry run. It calls the provider's read APIs
+        to check current state and calculates the diff, but never makes any changes
+        to real resources. It is completely safe to run repeatedly.
+
+    - id: 4
+      type: multiple_choice
+      question: "What does terraform apply do when resource B references an attribute from resource A?"
+      options:
+        - "It fails with a dependency error — you must manually order your resources"
+        - "It creates both resources simultaneously regardless of dependencies"
+        - "It automatically creates resource A before resource B based on the dependency"
+        - "It requires you to add an explicit depends_on argument"
+      correct: 2
+      explanation: |
+        Terraform builds a dependency graph from references. If B uses A's attribute,
+        Terraform knows A must be created first and schedules the operations accordingly.
+        No manual ordering is needed.
+
+    - id: 5
+      type: multiple_choice
+      question: "Which command should you use in a CI/CD pipeline to skip the interactive confirmation prompt?"
+      options:
+        - "terraform apply --yes"
+        - "terraform apply -force"
+        - "terraform apply -auto-approve"
+        - "terraform apply --no-confirm"
+      correct: 2
+      explanation: |
+        terraform apply -auto-approve skips the interactive confirmation. In CI/CD,
+        the recommended pattern is to run plan -out=tfplan first, get human approval,
+        then run apply tfplan -auto-approve to apply the exact reviewed plan.
+
+    - id: 6
+      type: true_false
+      question: "The terraform state file is safe to delete if you no longer need it."
+      correct: false
+      explanation: |
+        The state file is Terraform's record of what it manages. Deleting it means
+        Terraform loses track of all existing resources. It cannot update or destroy
+        them safely without the state. Treat the state file as critical infrastructure.
+
+    - id: 7
+      type: multiple_choice
+      question: "What is a 'computed attribute' on a resource?"
+      options:
+        - "An attribute you must compute yourself using a local expression"
+        - "A read-only value that the provider fills in after the resource is created (e.g., an ARN or IP address)"
+        - "An attribute with a default value"
+        - "An attribute that triggers resource replacement when changed"
+      correct: 1
+      explanation: |
+        Computed attributes are values the provider fills in after creating the
+        resource — they are not known before apply. Examples: public_ip, arn, id.
+        They show as (known after apply) in the plan output.
+
+    - id: 8
+      type: multiple_choice
+      question: "How do you destroy a single resource without destroying everything else?"
+      options:
+        - "terraform destroy --only=resource_type.name"
+        - "terraform destroy -target=resource_type.name"
+        - "Delete the resource block and run terraform apply"
+        - "Both B and C are valid approaches"
+      correct: 3
+      explanation: |
+        Both -target=resource_type.name and removing the resource block + running
+        apply are valid ways to delete a specific resource. The -target flag is
+        useful for immediate one-off deletions; removing the block is the cleaner,
+        permanent approach.
+
+lab:
+  title: "Write an aws_s3_bucket Resource with Tags"
+  description: |
+    Practice writing a complete resource block for an S3 bucket, including
+    a tags map with required metadata. This is one of the most common
+    real-world Terraform tasks.
+  instructions: |
+    1. Write a resource block of type "aws_s3_bucket" named "main".
+    2. Set the bucket argument to "my-terraform-lab-bucket-${var.environment}".
+       (Use string interpolation with an environment variable.)
+    3. Declare an input variable named "environment" with type string and
+       default "dev".
+    4. Add a tags block inside the resource with the following keys:
+       - Name = "Main Bucket"
+       - Environment = var.environment
+       - ManagedBy = "terraform"
+    5. Add an output named "bucket_name" that returns aws_s3_bucket.main.bucket.
+  starter_hcl: |
+    variable "environment" {
+      type    = string
+      default = "dev"
+    }
+
+    resource "aws_s3_bucket" "main" {
+      bucket = ""  # Use string interpolation: "my-terraform-lab-bucket-${var.environment}"
+
+      tags = {
+        Name        = ""  # Fill in
+        Environment = ""  # Reference the variable
+        ManagedBy   = ""  # Fill in: "terraform"
+      }
+    }
+
+    output "bucket_name" {
+      value = ""  # Reference the bucket name attribute
+    }
+  validation:
+    patterns:
+      - pattern: "resource\\s+\"aws_s3_bucket\"\\s+\"main\""
+        message: "Declare a resource of type aws_s3_bucket named main"
+      - pattern: "bucket\\s*=\\s*\"my-terraform-lab-bucket-\\$\\{var\\.environment\\}\""
+        message: "Use string interpolation for the bucket name"
+      - pattern: "ManagedBy\\s*=\\s*\"terraform\""
+        message: "Add a ManagedBy = \"terraform\" tag"
+      - pattern: "output\\s+\"bucket_name\""
+        message: "Declare an output named bucket_name"
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this S3 bucket resource block written by a Terraform beginner.
+      Check that string interpolation is used correctly, the tags map is
+      well-structured, and the output references the correct attribute.
+      Comment on naming conventions and any improvements that would make
+      this production-ready.
+  hints:
+    - "String interpolation syntax: \"prefix-${var.variable_name}-suffix\""
+    - "Reference a resource attribute using: resource_type.resource_name.attribute (e.g., aws_s3_bucket.main.bucket)"
+    - "Tags are a map — each key-value pair on its own line inside the tags = {} block"

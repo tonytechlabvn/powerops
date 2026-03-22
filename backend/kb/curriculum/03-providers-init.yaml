@@ -1,0 +1,347 @@
+name: providers-init
+title: "Providers & terraform init"
+order: 3
+difficulty: beginner
+estimated_minutes: 25
+prerequisites:
+  - iac-intro
+  - hcl-syntax
+concepts:
+  - provider
+  - required_providers
+powerops_features:
+  - workspace-editor
+description: |
+  Understand what providers are, how to configure them, and what happens when
+  you run terraform init to prepare a working directory for use.
+
+content:
+  sections:
+    - title: "What are Providers"
+      body: |
+        A provider is a plugin that lets Terraform communicate with a specific
+        platform or service. Every resource you manage with Terraform is backed by
+        a provider — the provider knows how to make the API calls to create, read,
+        update, and delete that resource on the target platform.
+
+        Providers are distributed separately from Terraform itself. When you declare
+        that you need the AWS provider, Terraform downloads it from the Terraform
+        Registry (registry.terraform.io) during initialisation. This architecture
+        keeps Terraform's core small while supporting hundreds of integrations.
+
+        Think of a provider as a translation layer. Your Terraform code says "I want
+        an S3 bucket with this name." The AWS provider translates that into the
+        correct sequence of AWS API calls using your credentials. When you run
+        terraform destroy, the provider knows how to call the delete API. You never
+        have to deal with the raw API directly.
+
+        The most commonly used providers include:
+          - hashicorp/aws — Amazon Web Services
+          - hashicorp/azurerm — Microsoft Azure
+          - hashicorp/google — Google Cloud Platform
+          - hashicorp/kubernetes — Kubernetes clusters
+          - hashicorp/github — GitHub repositories and settings
+          - cloudflare/cloudflare — Cloudflare DNS and security
+
+        Each provider is identified by a source address in the format
+        namespace/provider-name. The hashicorp namespace hosts the official providers
+        maintained by HashiCorp. Third-party providers use the author's namespace.
+      hcl_example: null
+
+    - title: "Configuring a Provider"
+      body: |
+        After declaring a provider in required_providers, you configure it using
+        a provider block. The provider block is where you set authentication
+        credentials, default regions, and other provider-level settings.
+
+        Provider configuration varies by provider. AWS needs a region and optionally
+        credentials. Azure needs a subscription ID and tenant ID. GitHub needs an
+        API token. Always check the provider's documentation for the full list of
+        configuration options.
+
+        Credentials and sensitive values should NEVER be hardcoded in provider blocks.
+        If you hardcode an API key in your .tf file, it will end up in your git
+        repository — a serious security risk. Instead, use environment variables or
+        a secrets management system.
+
+        For the AWS provider, the standard approach is to use environment variables:
+          AWS_ACCESS_KEY_ID
+          AWS_SECRET_ACCESS_KEY
+          AWS_DEFAULT_REGION
+
+        When these environment variables are set, the AWS provider picks them up
+        automatically without any explicit credential configuration in the provider
+        block. This keeps credentials out of your code entirely.
+
+        You can also configure multiple instances of the same provider using aliases.
+        For example, you might have two provider "aws" blocks — one for us-east-1
+        and one for eu-west-1 — with different aliases to manage resources in
+        multiple regions from the same configuration.
+      hcl_example: |
+        terraform {
+          required_providers {
+            aws = {
+              source  = "hashicorp/aws"
+              version = "~> 5.0"
+            }
+          }
+        }
+
+        # Basic provider configuration — region only, credentials from env vars
+        provider "aws" {
+          region = "us-east-1"
+        }
+
+        # Multi-region: alias lets you reference a specific provider config
+        provider "aws" {
+          alias  = "europe"
+          region = "eu-west-1"
+        }
+
+        # To use the aliased provider on a specific resource:
+        resource "aws_s3_bucket" "eu_bucket" {
+          provider = aws.europe
+          bucket   = "my-eu-data-bucket"
+        }
+
+    - title: "terraform init"
+      body: |
+        Before you can run terraform plan or terraform apply, you must initialise
+        the working directory with terraform init. This command prepares the
+        directory by performing three main actions.
+
+        First, it downloads provider plugins. Terraform reads your required_providers
+        declarations and downloads the specified provider versions from the registry
+        into a .terraform directory. The .terraform directory should be added to
+        .gitignore — it's a local cache, not source code.
+
+        Second, it initialises the backend. The backend determines where Terraform
+        stores its state file. By default, the state is stored locally in a file
+        called terraform.tfstate. If you configure a remote backend (like S3), init
+        configures the connection to that backend.
+
+        Third, it installs any modules. If your configuration references remote
+        modules, init downloads them too.
+
+        You must re-run terraform init whenever you:
+          - Add a new provider to required_providers
+          - Change a provider's version constraint
+          - Add a new module source
+          - Change the backend configuration
+
+        After a successful init, Terraform creates a .terraform.lock.hcl file.
+        This file records the exact versions of providers that were installed,
+        including their checksums. You SHOULD commit this file to git. It ensures
+        that everyone on your team (and your CI/CD pipeline) uses the exact same
+        provider versions, preventing "works on my machine" problems.
+      hcl_example: |
+        # After running terraform init, Terraform creates:
+        # .terraform/                    — provider binaries (gitignore this)
+        # .terraform.lock.hcl           — lock file (commit this to git)
+
+        # Example .terraform.lock.hcl content (auto-generated, do not edit manually):
+        # provider "registry.terraform.io/hashicorp/aws" {
+        #   version     = "5.31.0"
+        #   constraints = "~> 5.0"
+        #   hashes = [
+        #     "h1:...",
+        #   ]
+        # }
+
+    - title: "Version Constraints"
+      body: |
+        When declaring providers, you specify a version constraint to control which
+        provider versions Terraform is allowed to use. Getting version constraints
+        right protects you from breaking changes in provider updates while still
+        allowing security patches.
+
+        Terraform uses semantic versioning (MAJOR.MINOR.PATCH) for providers.
+        The available constraint operators are:
+
+        = "5.31.0" — exact version only. Rarely used; too restrictive.
+
+        != "5.0.0" — exclude a specific version.
+
+        > "5.0.0" — any version greater than 5.0.0.
+
+        >= "5.0.0" — any version 5.0.0 or higher.
+
+        < "6.0.0" — any version below 6.0.0.
+
+        ~> "5.0" — the pessimistic constraint operator (also called "tilde arrow").
+        This is the most common choice. "~> 5.0" means >= 5.0.0 and < 6.0.0 —
+        it allows minor and patch upgrades but prevents a major version bump
+        that might introduce breaking changes. "~> 5.31" means >= 5.31.0 and < 5.32.0,
+        allowing only patch upgrades.
+
+        The recommended practice for most teams is to use ~> with the major.minor
+        version (e.g., ~> 5.0). This gives you automatic patch-level security fixes
+        while protecting against breaking changes in minor or major versions.
+
+        For the terraform required_version constraint (specifying the minimum Terraform
+        CLI version), >= is most common: required_version = ">= 1.5.0" means any
+        Terraform version 1.5.0 or later is acceptable.
+      hcl_example: |
+        terraform {
+          # Require Terraform 1.5 or higher
+          required_version = ">= 1.5.0"
+
+          required_providers {
+            aws = {
+              source  = "hashicorp/aws"
+              # Allow any 5.x version — prevents accidental upgrade to v6
+              version = "~> 5.0"
+            }
+            github = {
+              source  = "integrations/github"
+              # Allow only 6.0.x patch releases — very conservative
+              version = "~> 6.0.0"
+            }
+          }
+        }
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "What is the primary role of a Terraform provider?"
+      options:
+        - "To store the Terraform state file remotely"
+        - "To translate Terraform resource declarations into platform-specific API calls"
+        - "To validate HCL syntax before apply"
+        - "To generate documentation for your configuration"
+      correct: 1
+      explanation: |
+        A provider is a plugin that translates Terraform resource declarations into
+        the API calls needed to create, read, update, and delete resources on a
+        specific platform like AWS or Azure.
+
+    - id: 2
+      type: multiple_choice
+      question: "Where does terraform init download provider plugins from by default?"
+      options:
+        - "GitHub releases"
+        - "The local .terraform directory"
+        - "The Terraform Registry (registry.terraform.io)"
+        - "HashiCorp's private S3 bucket"
+      correct: 2
+      explanation: |
+        By default, terraform init downloads provider plugins from the public
+        Terraform Registry at registry.terraform.io.
+
+    - id: 3
+      type: true_false
+      question: "You should commit the .terraform directory to git."
+      correct: false
+      explanation: |
+        The .terraform directory contains downloaded provider binaries and is a
+        local cache. It should be added to .gitignore. The .terraform.lock.hcl
+        file (not the directory) should be committed.
+
+    - id: 4
+      type: multiple_choice
+      question: "What does the version constraint \"~> 5.0\" mean?"
+      options:
+        - "Exactly version 5.0.0, nothing else"
+        - "Any version >= 5.0.0 and < 6.0.0"
+        - "Any version >= 5.0.0 with no upper limit"
+        - "Any version below 5.0.0"
+      correct: 1
+      explanation: |
+        The pessimistic constraint operator ~> allows updates within the same major
+        version. \"~> 5.0\" means >= 5.0.0 and < 6.0.0, allowing minor and patch
+        upgrades but preventing a potentially breaking major version bump.
+
+    - id: 5
+      type: multiple_choice
+      question: "When must you re-run terraform init?"
+      options:
+        - "Before every terraform plan"
+        - "Only when creating a brand new configuration from scratch"
+        - "When you add a new provider, change a version constraint, or add a new module"
+        - "Only when the AWS region changes"
+      correct: 2
+      explanation: |
+        You must re-run terraform init when you add a new provider, change version
+        constraints, add a new module source, or change the backend configuration.
+
+    - id: 6
+      type: true_false
+      question: "Hardcoding AWS credentials in the provider block is acceptable for development environments."
+      correct: false
+      explanation: |
+        Credentials hardcoded in .tf files end up in git history, which is a serious
+        security risk. Always use environment variables or a secrets manager —
+        even in development.
+
+    - id: 7
+      type: multiple_choice
+      question: "What is the purpose of the .terraform.lock.hcl file?"
+      options:
+        - "It locks the working directory so only one user can run Terraform at a time"
+        - "It records the exact provider versions and checksums installed, ensuring reproducibility"
+        - "It prevents terraform destroy from running without manual approval"
+        - "It stores the Terraform state in a human-readable format"
+      correct: 1
+      explanation: |
+        .terraform.lock.hcl records exact provider versions and checksums. Committing
+        it to git ensures all team members and CI/CD pipelines use identical provider
+        versions.
+
+lab:
+  title: "Configure the AWS Provider with a Region Variable"
+  description: |
+    Write a complete provider configuration that uses a variable for the AWS region.
+    This is the foundation of every real Terraform project targeting AWS.
+  instructions: |
+    1. Write a terraform{} block with required_version >= 1.5.0.
+    2. Declare the AWS provider in required_providers with source "hashicorp/aws"
+       and version constraint "~> 5.0".
+    3. Declare an input variable named "aws_region" with:
+       - type = string
+       - description = "AWS region to deploy resources into"
+       - default = "us-east-1"
+    4. Write a provider "aws" {} block that sets region = var.aws_region.
+    5. Ensure there are no hardcoded credential values in the provider block.
+  starter_hcl: |
+    terraform {
+      required_version = ">= 1.5.0"
+
+      required_providers {
+        aws = {
+          source  = "hashicorp/aws"
+          version = "~> 5.0"
+        }
+      }
+    }
+
+    variable "aws_region" {
+      type        = string
+      description = ""  # Fill in a useful description
+      default     = ""  # Fill in: us-east-1
+    }
+
+    provider "aws" {
+      region = ""  # Reference the variable here
+    }
+  validation:
+    patterns:
+      - pattern: "required_version\\s*=\\s*\">= 1\\.5\\.0\""
+        message: "Set required_version to \">= 1.5.0\""
+      - pattern: "source\\s*=\\s*\"hashicorp/aws\""
+        message: "Declare the AWS provider source as \"hashicorp/aws\""
+      - pattern: "variable\\s+\"aws_region\""
+        message: "Declare a variable named aws_region"
+      - pattern: "region\\s*=\\s*var\\.aws_region"
+        message: "Reference the variable in the provider block with var.aws_region"
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this AWS provider configuration written by a Terraform beginner.
+      Check that the version constraint is appropriate, the variable is properly
+      declared with a description, and the provider block references the variable
+      correctly. Flag any security issues such as hardcoded credentials.
+  hints:
+    - "Reference a variable using the syntax: var.variable_name"
+    - "The provider block takes the provider name as a label — for AWS it's provider \"aws\" {}"
+    - "You do not need to set credentials in the provider block — use AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables instead"

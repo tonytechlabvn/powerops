@@ -1,0 +1,435 @@
+name: modules
+title: "Modules"
+order: 8
+difficulty: intermediate
+estimated_minutes: 35
+prerequisites:
+  - iac-intro
+  - hcl-syntax
+  - providers-init
+  - resources
+  - variables-outputs
+  - data-sources
+  - state-management
+concepts:
+  - module
+powerops_features:
+  - module-registry
+  - ai-module-generator
+description: |
+  Learn how to package reusable infrastructure with modules, use published
+  modules from the Terraform Registry, and write your own well-structured modules.
+
+content:
+  sections:
+    - title: "What are Modules"
+      body: |
+        A module is a container for multiple related Terraform resources that are
+        used together. Every Terraform configuration is technically a module — the
+        files in your working directory form what's called the "root module." When
+        you call another module from within your configuration, it becomes a
+        "child module."
+
+        Modules exist to solve the same problem that functions solve in programming:
+        avoiding repetition. If you need to create a VPC with a standard set of
+        subnets, route tables, and internet gateways in five different environments,
+        you don't want to copy-paste 200 lines of HCL five times. You write it once
+        as a module and call it five times with different parameters.
+
+        Beyond DRY (Don't Repeat Yourself), modules provide:
+
+        Abstraction: A module hides the complexity of its implementation. The caller
+        only needs to know the module's inputs (variables) and outputs — not the
+        dozens of resources inside. A junior engineer can deploy a properly secured
+        VPC by calling a well-written module without needing to understand every
+        security group rule.
+
+        Encapsulation: Resources inside a module are scoped to that module. Name
+        conflicts between resources in different modules are not possible.
+
+        Consistency: When a team uses a shared module library, every environment
+        gets the same baseline configuration. Security controls and tagging
+        conventions are enforced uniformly.
+
+        Versioning: Modules stored in git or the Terraform Registry can be pinned
+        to specific versions. This means infrastructure changes go through the same
+        review process as application code.
+      hcl_example: |
+        # A module call references a source location and passes input variables
+        module "vpc" {
+          source  = "terraform-aws-modules/vpc/aws"
+          version = "~> 5.0"
+
+          name = "my-app-vpc"
+          cidr = "10.0.0.0/16"
+
+          azs             = ["us-east-1a", "us-east-1b", "us-east-1c"]
+          private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+          public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+
+          enable_nat_gateway = true
+        }
+
+        # Reference module outputs
+        output "vpc_id" {
+          value = module.vpc.vpc_id
+        }
+
+    - title: "Using Published Modules"
+      body: |
+        The Terraform Registry (registry.terraform.io) hosts thousands of
+        community and verified modules covering common infrastructure patterns.
+        Before writing a module from scratch, check if a well-maintained one
+        already exists.
+
+        Module source addresses on the registry follow the format:
+          namespace/module-name/provider
+
+        For example, terraform-aws-modules/vpc/aws is the popular AWS VPC module
+        maintained by the terraform-aws-modules organisation. This module creates
+        a production-ready VPC with public and private subnets, NAT gateways,
+        route tables, and internet gateways in about ten lines of module call code.
+
+        When calling a registry module, always specify a version constraint.
+        Without a version, Terraform uses the latest release — which could introduce
+        breaking changes the next time someone runs terraform init. Treat module
+        versions the same way you treat provider versions: pin them.
+
+        After adding a module call, run terraform init to download the module
+        source code into the .terraform directory.
+
+        Verified modules (marked with a blue checkmark on the registry) are
+        maintained by the provider's own team or a trusted partner. They follow
+        registry best practices and are a reliable starting point. Always review
+        the module's source code and README before using it in production —
+        understand what resources it creates on your behalf.
+
+        The module's README documents all input variables and outputs. Pay attention
+        to required variables (those without defaults) and the outputs available
+        for use in your root module.
+      hcl_example: |
+        # Using the community AWS EC2 instance module
+        module "ec2_instance" {
+          source  = "terraform-aws-modules/ec2-instance/aws"
+          version = "~> 5.0"
+
+          name          = "my-web-server"
+          instance_type = "t3.micro"
+          ami           = data.aws_ami.ubuntu.id
+          subnet_id     = module.vpc.private_subnets[0]
+
+          vpc_security_group_ids = [aws_security_group.web.id]
+
+          tags = {
+            Environment = var.environment
+            ManagedBy   = "terraform"
+          }
+        }
+
+    - title: "Writing Your Own Module"
+      body: |
+        Writing a module is simply a matter of organising Terraform files into a
+        directory with a clear interface defined by variables and outputs. Any
+        directory containing .tf files is a valid module.
+
+        A well-structured module directory contains:
+          main.tf      — resource definitions
+          variables.tf — input variable declarations (the module's parameters)
+          outputs.tf   — output value declarations (the module's return values)
+          README.md    — documentation (what the module does, inputs, outputs, examples)
+
+        The variables.tf file defines the module's public interface. Every
+        configurable aspect of the module should be a variable with a type,
+        description, and (where appropriate) a default value. Required variables
+        (no default) force the caller to provide a value.
+
+        The outputs.tf file defines what the module exposes to callers. Expose
+        the IDs, ARNs, and names of the key resources created by the module.
+        Don't expose every attribute of every resource — only the ones callers
+        are likely to need.
+
+        To call a local module, set source to a relative path:
+          source = "./modules/vpc"
+          source = "../shared/modules/security-group"
+
+        Never hardcode provider configuration inside a module. Modules inherit the
+        provider from the calling configuration. This is what allows the same module
+        to be used with different AWS accounts or regions.
+      hcl_example: |
+        # modules/s3-bucket/variables.tf
+        variable "bucket_name" {
+          type        = string
+          description = "Name of the S3 bucket to create"
+        }
+
+        variable "environment" {
+          type        = string
+          description = "Deployment environment (dev, staging, prod)"
+        }
+
+        variable "enable_versioning" {
+          type        = bool
+          description = "Whether to enable versioning on the bucket"
+          default     = false
+        }
+
+        # modules/s3-bucket/main.tf
+        resource "aws_s3_bucket" "this" {
+          bucket = var.bucket_name
+          tags = {
+            Environment = var.environment
+            ManagedBy   = "terraform"
+          }
+        }
+
+        resource "aws_s3_bucket_versioning" "this" {
+          count  = var.enable_versioning ? 1 : 0
+          bucket = aws_s3_bucket.this.id
+          versioning_configuration { status = "Enabled" }
+        }
+
+        # modules/s3-bucket/outputs.tf
+        output "bucket_id" {
+          value       = aws_s3_bucket.this.id
+          description = "The name (ID) of the bucket"
+        }
+
+        output "bucket_arn" {
+          value       = aws_s3_bucket.this.arn
+          description = "The ARN of the bucket"
+        }
+
+    - title: "Module Best Practices"
+      body: |
+        Writing good modules takes practice. Here are the conventions used by the
+        most widely-adopted Terraform modules to guide your work.
+
+        Use a single resource per module for simple cases. If a module only wraps
+        one resource type, ask yourself if it's adding enough value over using the
+        resource directly. Good modules typically encapsulate a multi-resource
+        pattern — a VPC with all its dependencies, an ECS service with its IAM
+        roles and load balancer rules, etc.
+
+        Name the primary resource "this". For modules that manage one central
+        resource type, naming it "this" is a community convention that makes
+        module source code predictable and easy to read.
+
+        Avoid provider blocks inside modules. Modules should be provider-agnostic
+        and inherit providers from the root. Exception: if the module manages
+        resources across multiple providers (rare), use provider aliases with
+        configuration_aliases.
+
+        Expose enough outputs. Think about what a caller would need: IDs for
+        dependency references, ARNs for IAM policies, endpoints for application
+        configuration. When in doubt, expose more rather than fewer — outputs
+        are cheap and easy to add later without breaking callers.
+
+        Version your modules. If you store modules in git, reference them with
+        a specific git tag (source = "git::https://github.com/org/repo.git?ref=v1.2.0").
+        This ensures stability across environments.
+
+        Write a README. Document: what the module does, what resources it creates,
+        all input variables with their types and descriptions, and all outputs.
+        Include a usage example. The README is the contract between the module
+        author and the module user.
+      hcl_example: |
+        # Calling a local module from the root module
+        module "app_bucket" {
+          source = "./modules/s3-bucket"
+
+          bucket_name       = "my-app-${var.environment}-assets"
+          environment       = var.environment
+          enable_versioning = var.environment == "prod" ? true : false
+        }
+
+        # Access module outputs
+        output "app_bucket_arn" {
+          value = module.app_bucket.bucket_arn
+        }
+
+        resource "aws_iam_role_policy" "app_s3_access" {
+          name = "app-s3-access"
+          role = aws_iam_role.app.id
+
+          policy = jsonencode({
+            Version = "2012-10-17"
+            Statement = [{
+              Effect   = "Allow"
+              Action   = ["s3:GetObject", "s3:PutObject"]
+              Resource = "${module.app_bucket.bucket_arn}/*"
+            }]
+          })
+        }
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "What is the root module in a Terraform configuration?"
+      options:
+        - "The first module listed in the Terraform Registry"
+        - "The .terraform directory created by terraform init"
+        - "The collection of .tf files in the working directory from which you run terraform commands"
+        - "The parent module that all others must inherit from"
+      correct: 2
+      explanation: |
+        Every Terraform configuration is a module. The files in your working
+        directory form the root module. Any module called from there becomes a
+        child module.
+
+    - id: 2
+      type: multiple_choice
+      question: "What format does the Terraform Registry use for module source addresses?"
+      options:
+        - "provider/namespace/module-name"
+        - "namespace/module-name/provider"
+        - "module-name/provider/version"
+        - "registry.terraform.io/namespace/module"
+      correct: 1
+      explanation: |
+        Registry module source addresses follow the format namespace/module-name/provider.
+        For example: terraform-aws-modules/vpc/aws.
+
+    - id: 3
+      type: true_false
+      question: "You should include a provider block inside every module you write."
+      correct: false
+      explanation: |
+        Modules should never include provider blocks (unless using configuration aliases
+        for multi-provider modules). Modules inherit providers from the root module.
+        Including a provider block in a module makes it inflexible and hard to reuse.
+
+    - id: 4
+      type: multiple_choice
+      question: "What must you run after adding a new module call to your configuration?"
+      options:
+        - "terraform validate"
+        - "terraform plan"
+        - "terraform init"
+        - "terraform fmt"
+      correct: 2
+      explanation: |
+        terraform init downloads module source code into the .terraform directory.
+        You must run it after adding any new module call, just as you do after
+        adding a new provider.
+
+    - id: 5
+      type: multiple_choice
+      question: "How do you reference an output named 'vpc_id' from a module called 'network'?"
+      options:
+        - "network.vpc_id"
+        - "output.network.vpc_id"
+        - "module.network.vpc_id"
+        - "var.network.vpc_id"
+      correct: 2
+      explanation: |
+        Module outputs are referenced as module.<module_name>.<output_name>.
+        For example: module.network.vpc_id.
+
+    - id: 6
+      type: multiple_choice
+      question: "What is the recommended name for the primary resource inside a single-resource module?"
+      options:
+        - "main"
+        - "default"
+        - "primary"
+        - "this"
+      correct: 3
+      explanation: |
+        The community convention for the primary resource inside a module is to
+        name it "this". This makes module source code predictable — you always
+        know the resource address will be resource_type.this.
+
+    - id: 7
+      type: true_false
+      question: "Specifying a version constraint on a registry module call is optional but recommended."
+      correct: false
+      explanation: |
+        Always specify a version constraint when calling a registry module. Without
+        one, terraform init always downloads the latest version, which can introduce
+        breaking changes unexpectedly. Treat module versions like provider versions —
+        pin them.
+
+lab:
+  title: "Create a Simple Reusable S3 Bucket Module"
+  description: |
+    Build a minimal but complete module that encapsulates an S3 bucket with
+    optional versioning, then call it from the root module.
+  instructions: |
+    1. Create module files under modules/s3-bucket/:
+       a. variables.tf with two variables: bucket_name (string, required) and
+          enable_versioning (bool, default false).
+       b. main.tf with an aws_s3_bucket resource named "this" using var.bucket_name,
+          and a conditional aws_s3_bucket_versioning resource (count = var.enable_versioning ? 1 : 0).
+       c. outputs.tf with outputs: bucket_id and bucket_arn.
+    2. In your root main.tf, call the module with:
+       - source = "./modules/s3-bucket"
+       - bucket_name = "my-lab-assets-bucket"
+       - enable_versioning = true
+    3. Add a root-level output "assets_bucket_arn" referencing the module output.
+  starter_hcl: |
+    # modules/s3-bucket/variables.tf
+    variable "bucket_name" {
+      type        = string
+      description = ""  # Fill in
+    }
+
+    variable "enable_versioning" {
+      type    = bool
+      default = false
+    }
+
+    # modules/s3-bucket/main.tf
+    resource "aws_s3_bucket" "this" {
+      bucket = ""  # Reference the variable
+    }
+
+    resource "aws_s3_bucket_versioning" "this" {
+      count  = ""  # Conditional: var.enable_versioning ? 1 : 0
+      bucket = aws_s3_bucket.this.id
+      versioning_configuration {
+        status = "Enabled"
+      }
+    }
+
+    # modules/s3-bucket/outputs.tf
+    output "bucket_id" {
+      value = ""  # aws_s3_bucket.this.id
+    }
+
+    output "bucket_arn" {
+      value = ""  # aws_s3_bucket.this.arn
+    }
+
+    # root main.tf
+    module "assets" {
+      source = "./modules/s3-bucket"
+
+      bucket_name       = "my-lab-assets-bucket"
+      enable_versioning = true
+    }
+
+    output "assets_bucket_arn" {
+      value = ""  # module.assets.bucket_arn
+    }
+  validation:
+    patterns:
+      - pattern: "resource\\s+\"aws_s3_bucket\"\\s+\"this\""
+        message: "Name the primary resource 'this' inside the module"
+      - pattern: "count\\s*=\\s*var\\.enable_versioning\\s*\\?\\s*1\\s*:\\s*0"
+        message: "Use a conditional count for the versioning resource"
+      - pattern: "source\\s*=\\s*\"\\./modules/s3-bucket\""
+        message: "Call the module with source = \"./modules/s3-bucket\""
+      - pattern: "module\\.assets\\.bucket_arn"
+        message: "Reference the module output as module.assets.bucket_arn"
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this Terraform module implementation. Check that the module has a clean
+      interface (well-described variables, useful outputs), the conditional versioning
+      resource uses count correctly, no provider block is included in the module,
+      and the root module calls and references the child module correctly.
+  hints:
+    - "Module source for a local path uses a relative path starting with ./ or ../"
+    - "Conditional resource creation: count = var.some_bool ? 1 : 0 creates 1 instance when true, 0 when false"
+    - "Module outputs are referenced as module.<module_name>.<output_name> in the root module"

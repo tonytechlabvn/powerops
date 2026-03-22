@@ -1,0 +1,381 @@
+name: workspaces-environments
+title: "Workspaces & Environments"
+order: 10
+difficulty: advanced
+estimated_minutes: 25
+prerequisites:
+  - iac-intro
+  - hcl-syntax
+  - providers-init
+  - resources
+  - variables-outputs
+  - data-sources
+  - state-management
+  - modules
+  - meta-arguments
+concepts:
+  - workspace
+powerops_features: []
+description: |
+  Understand Terraform workspaces, how to use terraform.workspace in
+  configurations, and the patterns and trade-offs for managing multiple
+  environments with Terraform.
+
+content:
+  sections:
+    - title: "Terraform Workspaces"
+      body: |
+        A Terraform workspace is a named, isolated instance of state within a
+        single backend. Every Terraform configuration starts with one workspace
+        called "default." You can create additional workspaces and switch between
+        them, each maintaining its own independent state file.
+
+        The key property of workspaces is state isolation. When you are in the
+        "staging" workspace and run terraform apply, the state changes are recorded
+        in the staging state file — completely separate from the "production" state
+        file. Running terraform destroy in staging will not touch production resources.
+
+        Workspace CLI commands:
+          terraform workspace list    — list all workspaces (* marks the current one)
+          terraform workspace new dev — create a new workspace named "dev"
+          terraform workspace select prod — switch to the "prod" workspace
+          terraform workspace show    — print the current workspace name
+          terraform workspace delete dev — delete the "dev" workspace (must be empty)
+
+        With the S3 backend, each workspace stores its state at a different path
+        within the same bucket. The default workspace uses the key you configured
+        (e.g., app/terraform.tfstate). Other workspaces use
+        env:/<workspace-name>/<key> (e.g., env:/staging/app/terraform.tfstate).
+
+        Workspaces are a feature of backends — not all backends support multiple
+        workspaces. The local, S3, Azure Blob, GCS, and Terraform Cloud backends
+        all support workspaces. Check your backend's documentation.
+      hcl_example: |
+        # Shell commands (not HCL):
+        #
+        # Create and switch to a staging workspace:
+        # $ terraform workspace new staging
+        # Created and switched to workspace "staging"!
+        #
+        # List all workspaces:
+        # $ terraform workspace list
+        #   default
+        # * staging
+        #   prod
+        #
+        # Switch back to default:
+        # $ terraform workspace select default
+
+    - title: "terraform.workspace"
+      body: |
+        Inside your Terraform configuration, the built-in value terraform.workspace
+        returns the name of the currently selected workspace as a string. You can
+        use this to branch your configuration based on the active environment.
+
+        Common uses of terraform.workspace:
+          - Naming resources with the environment embedded to avoid conflicts
+          - Selecting different instance sizes per environment (t3.micro for dev,
+            m5.large for prod)
+          - Conditionally enabling features that only belong in production
+            (enhanced monitoring, deletion protection, multi-AZ)
+          - Building workspace-specific variable maps using lookup()
+
+        The lookup() function is especially useful here. It takes a map and a key
+        and returns the corresponding value — with an optional fallback for unknown keys.
+        Combined with a per-environment map variable, it lets you define all
+        environment-specific settings in one place.
+
+        Be careful not to overuse terraform.workspace in ways that make your
+        configuration hard to reason about. If the production and development
+        configurations diverge significantly, a workspace-branched configuration
+        becomes difficult to understand — you have to mentally simulate "what does
+        this look like in prod?" every time you read the code. At that point,
+        separate configurations (or a well-parameterised module) may be cleaner.
+      hcl_example: |
+        locals {
+          # Map of per-environment settings, keyed by workspace name
+          env_config = {
+            default = {
+              instance_type    = "t3.micro"
+              min_capacity     = 1
+              deletion_protect = false
+            }
+            staging = {
+              instance_type    = "t3.small"
+              min_capacity     = 1
+              deletion_protect = false
+            }
+            prod = {
+              instance_type    = "m5.large"
+              min_capacity     = 3
+              deletion_protect = true
+            }
+          }
+
+          # Look up config for the current workspace, fall back to "default"
+          config = lookup(local.env_config, terraform.workspace, local.env_config["default"])
+        }
+
+        resource "aws_instance" "app" {
+          ami           = data.aws_ami.amazon_linux.id
+          instance_type = local.config.instance_type
+
+          tags = {
+            Name        = "app-${terraform.workspace}"
+            Environment = terraform.workspace
+          }
+        }
+
+    - title: "Environment Patterns"
+      body: |
+        There are several common patterns for managing multiple environments with
+        Terraform. Workspaces are one option, but not always the best one.
+        Understanding the trade-offs helps you choose the right approach.
+
+        Pattern 1 — Workspaces (same config, different state):
+        All environments use the same .tf files, branched by terraform.workspace.
+        Pros: single source of truth, easy to keep environments in sync.
+        Cons: harder to have genuinely different configurations per environment,
+        one configuration change affects all environments once applied in each.
+
+        Pattern 2 — Directory per environment:
+        Create separate directories: environments/dev/, environments/staging/,
+        environments/prod/. Each has its own .tf files and backend config.
+        Pros: complete isolation, easy to have different configurations.
+        Cons: duplication risk — you must keep shared logic in modules and call
+        them from each environment. Changes must be applied in each directory.
+
+        Pattern 3 — Terragrunt (DRY wrapper around Terraform):
+        Terragrunt is a thin wrapper that adds DRY helpers for multi-environment
+        configurations. It handles keeping backend configs and common variable
+        values out of the per-environment directories. Popular in large organisations
+        with many environments. Covered beyond this curriculum.
+
+        Recommendation for most teams: Start with workspaces for simple projects
+        with a few environments that are nearly identical. Move to the directory
+        pattern (Pattern 2) backed by shared modules when environments diverge
+        significantly or you need different approval workflows per environment.
+      hcl_example: |
+        # Pattern 2: Directory structure example
+        #
+        # environments/
+        # ├── dev/
+        # │   ├── main.tf        (calls shared modules)
+        # │   ├── variables.tf
+        # │   └── backend.tf     (dev-specific S3 key)
+        # ├── staging/
+        # │   ├── main.tf
+        # │   ├── variables.tf
+        # │   └── backend.tf
+        # └── prod/
+        #     ├── main.tf
+        #     ├── variables.tf
+        #     └── backend.tf
+        #
+        # modules/
+        # ├── vpc/
+        # ├── ec2-cluster/
+        # └── rds/
+
+        # environments/dev/main.tf
+        module "vpc" {
+          source      = "../../modules/vpc"
+          environment = "dev"
+          cidr_block  = "10.1.0.0/16"
+        }
+
+    - title: "Workspace Best Practices"
+      body: |
+        If you decide to use workspaces, following these practices will save you
+        from common pitfalls.
+
+        Never rely solely on workspace isolation for production safety. Workspaces
+        share the same backend configuration and the same .tf files. A mistake in
+        the configuration affects all workspaces once applied. Add additional
+        safeguards: use lifecycle { prevent_destroy = true } on critical production
+        resources, require manual approval for production applies, and set up
+        separate AWS accounts for production and non-production.
+
+        Use separate AWS accounts per environment. This is the strongest isolation
+        boundary. Even with workspaces, using a separate AWS account for production
+        means a misconfigured IAM policy in dev cannot accidentally affect prod.
+        Configure a different provider alias or use environment variables to switch
+        credentials per workspace.
+
+        Make workspace selection explicit in CI/CD. Don't rely on operators
+        remembering to switch workspaces. In your pipeline scripts, always run
+        terraform workspace select <env> before plan and apply.
+
+        Document which workspaces exist. The terraform workspace list command shows
+        them, but document the expected workspaces in your README so new team members
+        know what to expect.
+
+        Avoid the default workspace for real environments. The "default" workspace is
+        easy to accidentally use when someone forgets to switch. Name all real
+        environments explicitly (dev, staging, prod) and treat "default" as a
+        scratch space or leave it empty.
+      hcl_example: |
+        # CI/CD script pattern (bash) — always explicit workspace selection:
+        #
+        # #!/bin/bash
+        # set -e
+        # TARGET_ENV="${1:-dev}"   # Pass environment as argument
+        #
+        # terraform init
+        # terraform workspace select "$TARGET_ENV" || terraform workspace new "$TARGET_ENV"
+        # terraform plan -out=tfplan -var-file="vars/${TARGET_ENV}.tfvars"
+        # # ... human approval step ...
+        # terraform apply tfplan
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "What is the name of the workspace that exists by default in every new Terraform configuration?"
+      options:
+        - "main"
+        - "root"
+        - "default"
+        - "primary"
+      correct: 2
+      explanation: |
+        Every Terraform configuration starts with a workspace named "default."
+        It cannot be deleted. Best practice is to not use it for real environments —
+        create explicitly named workspaces instead.
+
+    - id: 2
+      type: multiple_choice
+      question: "How do you create and immediately switch to a new workspace named 'staging'?"
+      options:
+        - "terraform workspace create staging"
+        - "terraform workspace new staging"
+        - "terraform workspace switch staging"
+        - "terraform workspace init staging"
+      correct: 1
+      explanation: |
+        terraform workspace new <name> creates a new workspace and automatically
+        switches to it. terraform workspace select switches to an existing workspace.
+
+    - id: 3
+      type: true_false
+      question: "When using the S3 backend, each workspace stores its state at the same S3 key path."
+      correct: false
+      explanation: |
+        Each workspace gets its own state path. The default workspace uses the
+        configured key. Other workspaces use env:/<workspace-name>/<key>,
+        keeping all state files isolated from each other.
+
+    - id: 4
+      type: multiple_choice
+      question: "What does terraform.workspace return in a configuration?"
+      options:
+        - "The path to the current working directory"
+        - "The name of the currently selected workspace as a string"
+        - "The list of all available workspaces"
+        - "The backend type currently in use"
+      correct: 1
+      explanation: |
+        terraform.workspace is a built-in value that returns the current workspace
+        name as a string (e.g., "dev", "staging", "prod"). Use it to branch
+        configuration by environment.
+
+    - id: 5
+      type: multiple_choice
+      question: "Which environment pattern provides the strongest isolation between environments?"
+      options:
+        - "Workspaces with terraform.workspace branching"
+        - "A single configuration with environment variables"
+        - "Separate directories per environment backed by shared modules, with separate AWS accounts"
+        - "Separate .tfvars files with a single workspace"
+      correct: 2
+      explanation: |
+        Separate directories per environment combined with separate AWS accounts
+        provides the strongest isolation. Even if a configuration error occurs,
+        separate accounts prevent cross-environment blast radius.
+
+    - id: 6
+      type: true_false
+      question: "It is safe to skip explicit workspace selection in CI/CD pipelines and rely on the previously selected workspace."
+      correct: false
+      explanation: |
+        Always select the workspace explicitly in CI/CD pipelines. Relying on
+        the previously selected workspace means a pipeline misconfiguration or
+        a previous failed run could leave the wrong workspace selected, causing
+        changes to be applied to the wrong environment.
+
+lab:
+  title: "Create a Workspace-Aware Configuration Using terraform.workspace"
+  description: |
+    Write a configuration that uses terraform.workspace to select different
+    resource sizes and feature flags per environment.
+  instructions: |
+    1. Create a locals block with an env_settings map containing at least two
+       environment entries (e.g., "default" and "prod"), each with:
+       - instance_type: string
+       - enable_detailed_monitoring: bool
+    2. Use lookup() to select settings for the current workspace, falling back
+       to the "default" entry.
+    3. Write an aws_instance resource named "app" that uses:
+       - instance_type from the looked-up local
+       - monitoring = local.config.enable_detailed_monitoring
+       - A Name tag using terraform.workspace
+    4. Add an output "environment" that returns terraform.workspace.
+    5. Add an output "instance_type_used" that returns the looked-up instance type.
+  starter_hcl: |
+    locals {
+      env_settings = {
+        default = {
+          instance_type              = "t3.micro"
+          enable_detailed_monitoring = false
+        }
+        prod = {
+          instance_type              = "m5.large"
+          enable_detailed_monitoring = true
+        }
+      }
+
+      # Look up settings for the current workspace
+      config = lookup(local.env_settings, "", local.env_settings["default"])
+      #                                    ^ Fill in: terraform.workspace
+    }
+
+    resource "aws_instance" "app" {
+      ami           = "ami-0c55b159cbfafe1f0"
+      instance_type = ""  # Use local.config.instance_type
+      monitoring    = ""  # Use local.config.enable_detailed_monitoring
+
+      tags = {
+        Name        = ""  # Use terraform.workspace in interpolation
+        ManagedBy   = "terraform"
+      }
+    }
+
+    output "environment" {
+      value = ""  # Return terraform.workspace
+    }
+
+    output "instance_type_used" {
+      value = ""  # Return local.config.instance_type
+    }
+  validation:
+    patterns:
+      - pattern: "lookup\\(local\\.env_settings,\\s*terraform\\.workspace"
+        message: "Use lookup(local.env_settings, terraform.workspace, ...) to select environment settings"
+      - pattern: "instance_type\\s*=\\s*local\\.config\\.instance_type"
+        message: "Set instance_type from the looked-up local config"
+      - pattern: "monitoring\\s*=\\s*local\\.config\\.enable_detailed_monitoring"
+        message: "Set monitoring from the looked-up local config"
+      - pattern: "output\\s+\"environment\""
+        message: "Declare an output named environment"
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this workspace-aware Terraform configuration. Check that the lookup()
+      pattern is correct, the fallback to "default" settings works properly,
+      terraform.workspace is used appropriately in both the locals and tags,
+      and the outputs are useful. Comment on whether this pattern is appropriate
+      vs. using separate directories for environments.
+  hints:
+    - "lookup(map, key, default) — the third argument is the fallback value when the key is not in the map"
+    - "terraform.workspace returns the workspace name as a plain string — use it directly in lookup() and in ${} interpolation"
+    - "Switch workspaces with: terraform workspace new prod / terraform workspace select prod"

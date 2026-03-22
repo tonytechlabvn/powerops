@@ -1,0 +1,485 @@
+name: meta-arguments
+title: "Meta-Arguments"
+order: 9
+difficulty: advanced
+estimated_minutes: 35
+prerequisites:
+  - iac-intro
+  - hcl-syntax
+  - providers-init
+  - resources
+  - variables-outputs
+  - data-sources
+  - state-management
+  - modules
+concepts:
+  - count
+  - for_each
+  - depends_on
+  - lifecycle
+powerops_features:
+  - stack-composer
+description: |
+  Master meta-arguments — special arguments available on every resource block
+  that control how Terraform creates, updates, and manages multiple instances
+  of a resource.
+
+content:
+  sections:
+    - title: "count"
+      body: |
+        The count meta-argument tells Terraform how many identical instances of a
+        resource to create. Set count to a whole number and Terraform creates that
+        many copies, each tracked independently in state.
+
+        When count is used, each resource instance is addressed by its zero-based
+        index: resource_type.name[0], resource_type.name[1], etc. Inside the resource
+        block, the special value count.index gives the current instance's index.
+        This lets you create unique names: "server-${count.index}" produces
+        "server-0", "server-1", "server-2".
+
+        count = 0 is a useful pattern for conditionally creating a resource.
+        Set count = var.enable_feature ? 1 : 0 to create the resource only when the
+        variable is true. This is simpler than wrapping the entire block in a
+        conditional.
+
+        Limitations of count: All instances share the same configuration, differing
+        only in their index. If you need instances with meaningfully different
+        attributes (different names, different ports, different sizes), count gets
+        awkward — you end up using element(list, count.index) gymnastics. This is
+        where for_each is a better fit.
+
+        Another significant limitation: count instances are tracked by numeric index.
+        If you remove an instance from the middle of the list (e.g., reduce count
+        from 3 to 2), Terraform destroys and recreates the shifted instances.
+        This can cause unintended churn in production.
+      hcl_example: |
+        # Create 3 identical S3 buckets
+        resource "aws_s3_bucket" "backups" {
+          count  = 3
+          bucket = "my-app-backup-${count.index}"
+
+          tags = {
+            Name  = "Backup Bucket ${count.index}"
+            Index = tostring(count.index)
+          }
+        }
+
+        # Reference all instances as a list
+        output "backup_bucket_arns" {
+          value = aws_s3_bucket.backups[*].arn
+        }
+
+        # Conditional resource: only create in production
+        resource "aws_cloudwatch_log_group" "app" {
+          count             = var.environment == "prod" ? 1 : 0
+          name              = "/app/${var.environment}"
+          retention_in_days = 90
+        }
+
+    - title: "for_each"
+      body: |
+        The for_each meta-argument creates one resource instance for each element
+        in a map or set. Unlike count (which uses a numeric index), for_each tracks
+        instances by a meaningful string key — making state more stable and changes
+        more predictable.
+
+        When for_each is set to a map, each instance is addressed as
+        resource_type.name["key"]. Inside the resource block, each.key gives the
+        current element's key and each.value gives its value.
+
+        When for_each is set to a set of strings (toset([...])), each instance is
+        addressed by the string itself: resource_type.name["us-east-1"]. In this
+        case each.key and each.value are both the string.
+
+        The key advantage of for_each over count: removing an element from the
+        map or set removes exactly that one instance. Other instances are unaffected.
+        With count, removing an element from a list causes all subsequent instances
+        to be re-indexed and potentially recreated.
+
+        for_each cannot be used with lists directly. Convert a list to a set with
+        toset() when you want for_each behaviour without a map. Be aware that sets
+        are unordered — if order matters, use a map with explicit keys instead.
+
+        for_each expressions must be known at plan time. You cannot use a for_each
+        value that depends on a resource attribute marked as (known after apply) —
+        Terraform needs to know all the keys before it can plan the instances.
+      hcl_example: |
+        # for_each with a map: create one IAM user per entry
+        variable "iam_users" {
+          type = map(object({
+            email = string
+            role  = string
+          }))
+          default = {
+            alice = { email = "alice@example.com", role = "developer" }
+            bob   = { email = "bob@example.com",   role = "ops" }
+          }
+        }
+
+        resource "aws_iam_user" "team" {
+          for_each = var.iam_users
+          name     = each.key
+
+          tags = {
+            Email = each.value.email
+            Role  = each.value.role
+          }
+        }
+
+        # for_each with a set of strings: create one bucket per region
+        resource "aws_s3_bucket" "regional" {
+          for_each = toset(["us-east-1", "eu-west-1", "ap-southeast-1"])
+          bucket   = "my-app-assets-${each.key}"
+
+          tags = {
+            Region = each.key
+          }
+        }
+
+    - title: "depends_on"
+      body: |
+        Terraform builds a dependency graph automatically from resource references.
+        When resource B uses an attribute from resource A, Terraform knows to create
+        A before B. In most cases, you never need to declare dependencies manually.
+
+        However, there are cases where a dependency exists that Terraform cannot
+        detect from the configuration alone — a hidden dependency. The depends_on
+        meta-argument handles these cases.
+
+        A classic example is an IAM role and an EC2 instance. The instance doesn't
+        directly reference the role's attributes, but it needs the role to exist
+        and the role's policy attachments to be in place before the instance
+        can successfully call AWS APIs at startup. Without depends_on, Terraform
+        might create the instance before the policy attachment completes.
+
+        Another common case is resource ordering with provisioners or when a
+        resource depends on the side effects of another resource rather than its
+        attributes (for example, a Lambda function that must run after an S3 bucket
+        notification is configured).
+
+        Use depends_on sparingly. Explicit dependencies make the configuration
+        harder to read and can cause Terraform to be more conservative than necessary
+        when parallelising operations. Always prefer implicit dependencies through
+        attribute references. Only reach for depends_on when you have a genuine
+        hidden dependency that cannot be expressed any other way.
+
+        depends_on takes a list of resource references (without attribute access):
+        depends_on = [aws_iam_role_policy_attachment.app]
+      hcl_example: |
+        resource "aws_iam_role" "app" {
+          name               = "app-role"
+          assume_role_policy = data.aws_iam_policy_document.assume_role.json
+        }
+
+        resource "aws_iam_role_policy_attachment" "app_s3" {
+          role       = aws_iam_role.app.name
+          policy_arn = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+        }
+
+        resource "aws_instance" "app" {
+          ami           = data.aws_ami.amazon_linux.id
+          instance_type = "t3.micro"
+          iam_instance_profile = aws_iam_instance_profile.app.name
+
+          # Hidden dependency: instance needs policy attached before boot
+          # The instance block doesn't reference aws_iam_role_policy_attachment,
+          # so Terraform can't detect this automatically.
+          depends_on = [aws_iam_role_policy_attachment.app_s3]
+        }
+
+    - title: "lifecycle"
+      body: |
+        The lifecycle meta-argument customises how Terraform manages a resource's
+        creation, update, and deletion behaviour. It takes a nested block with
+        one or more of the following arguments:
+
+        create_before_destroy: By default, when a resource must be replaced
+        (destroyed and recreated), Terraform destroys the old instance first.
+        Setting create_before_destroy = true reverses this: the new instance is
+        created before the old one is destroyed. This minimises downtime for
+        resources like load balancer target groups or certificates.
+
+        prevent_destroy: Setting prevent_destroy = true causes Terraform to error
+        if anything in the plan would destroy this resource. Use this on critical
+        resources like production databases, S3 buckets with important data, and
+        state storage buckets. It's a safety net against accidental deletion.
+        Note: this only prevents destruction via terraform apply — it doesn't
+        prevent terraform destroy.
+
+        ignore_changes: Accepts a list of attribute names. Terraform will not
+        plan updates to those attributes even if the configuration value differs
+        from the actual value. Useful when an external process legitimately modifies
+        a resource after Terraform creates it (e.g., an auto-scaling group that
+        adjusts its desired_capacity in response to load).
+
+        replace_triggered_by: A list of resource references. When any referenced
+        resource changes, this resource will be replaced. Useful for ensuring a
+        resource is recreated when a dependency changes in a way that can't be
+        detected from the resource's own attributes.
+      hcl_example: |
+        resource "aws_db_instance" "main" {
+          identifier     = "prod-db"
+          engine         = "postgres"
+          instance_class = "db.t3.medium"
+          username       = "dbadmin"
+          password       = var.db_password
+
+          lifecycle {
+            # Never allow Terraform to destroy this database
+            prevent_destroy = true
+
+            # Ignore external changes to allocated_storage (managed by AWS auto-scaling)
+            ignore_changes = [allocated_storage]
+          }
+        }
+
+        resource "aws_autoscaling_group" "app" {
+          name             = "app-asg"
+          desired_capacity = 2
+          min_size         = 1
+          max_size         = 10
+
+          lifecycle {
+            # Create new instances before terminating old ones during updates
+            create_before_destroy = true
+
+            # Don't fight auto-scaling: ignore changes to desired_capacity
+            ignore_changes = [desired_capacity]
+          }
+        }
+
+    - title: "count vs for_each"
+      body: |
+        Choosing between count and for_each is one of the most important decisions
+        when writing production Terraform. Here is a clear decision framework.
+
+        Use count when:
+          - You need N identical resources with no meaningful differences
+          - You need a simple conditional (count = var.enabled ? 1 : 0)
+          - The instances have no persistent identity that matters
+
+        Use for_each when:
+          - Instances have distinct identities (different names, different configs)
+          - You need to be able to add or remove specific instances without affecting others
+          - You're iterating over a map of configuration objects
+          - The set of instances will change over time
+
+        The stability argument is the most important one. Consider creating three
+        S3 buckets with count = 3, named bucket-0, bucket-1, bucket-2. If you
+        later decide you only need two — and you want to keep bucket-0 and bucket-2
+        but remove bucket-1 — count cannot do this cleanly. Removing bucket-1 means
+        setting count = 2, which creates bucket-0 and bucket-1. Terraform destroys
+        the old bucket-2 and renames bucket-2 to bucket-1 (effectively destroying
+        and recreating it).
+
+        With for_each using keys "a", "b", "c", removing "b" is trivial —
+        Terraform destroys exactly bucket["b"] and leaves the others untouched.
+
+        General rule for production code: prefer for_each over count for anything
+        more than a simple conditional resource creation.
+      hcl_example: |
+        # Prefer this (for_each with map):
+        variable "buckets" {
+          type    = map(string)
+          default = {
+            logs    = "my-app-logs"
+            assets  = "my-app-assets"
+            backups = "my-app-backups"
+          }
+        }
+
+        resource "aws_s3_bucket" "app" {
+          for_each = var.buckets
+          bucket   = each.value
+
+          tags = { Purpose = each.key }
+        }
+
+        # Over this (count with list index):
+        # resource "aws_s3_bucket" "app" {
+        #   count  = length(var.bucket_names)
+        #   bucket = var.bucket_names[count.index]
+        # }
+        # — removing a name from the middle causes unintended replacements
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "How do you reference the third instance of a resource created with count?"
+      options:
+        - "resource_type.name.2"
+        - "resource_type.name[2]"
+        - "resource_type.name(2)"
+        - "resource_type.name#2"
+      correct: 1
+      explanation: |
+        count instances are addressed with zero-based square-bracket index notation:
+        resource_type.name[0], resource_type.name[1], resource_type.name[2].
+
+    - id: 2
+      type: multiple_choice
+      question: "What is the key advantage of for_each over count for managing multiple resource instances?"
+      options:
+        - "for_each is faster to execute than count"
+        - "for_each instances are tracked by a stable string key, so removing one instance doesn't affect the others"
+        - "for_each allows you to create more than 10 instances; count is limited to 10"
+        - "for_each works with any provider; count only works with AWS"
+      correct: 1
+      explanation: |
+        for_each tracks instances by a stable string key. Removing one key destroys
+        only that instance. count tracks by numeric index, so removing a middle element
+        re-indexes and potentially recreates all subsequent instances.
+
+    - id: 3
+      type: true_false
+      question: "You can pass a plain list directly to for_each without any conversion."
+      correct: false
+      explanation: |
+        for_each requires a map or set, not a list. Convert a list to a set using
+        toset([...]). Be aware that sets are unordered — use a map with explicit
+        keys if order or unique naming matters.
+
+    - id: 4
+      type: multiple_choice
+      question: "What does 'lifecycle { prevent_destroy = true }' protect against?"
+      options:
+        - "Prevents any updates to the resource's attributes"
+        - "Prevents Terraform from planning a destroy of the resource, erroring instead"
+        - "Prevents other team members from running terraform destroy"
+        - "Prevents the resource from being imported"
+      correct: 1
+      explanation: |
+        prevent_destroy = true causes Terraform to raise an error during plan if
+        any change would result in the resource being destroyed. It does not prevent
+        terraform destroy from running — it protects against accidental deletion
+        through normal apply workflows.
+
+    - id: 5
+      type: multiple_choice
+      question: "When should you use 'depends_on'?"
+      options:
+        - "Always, to make all dependencies explicit and clear"
+        - "Only when there is a hidden dependency that Terraform cannot detect from attribute references"
+        - "Whenever you want to control the order of resource creation"
+        - "When a resource needs to be created before its provider is configured"
+      correct: 1
+      explanation: |
+        Terraform builds the dependency graph automatically from attribute references.
+        depends_on is only for hidden dependencies — cases where a dependency exists
+        that isn't expressed through attribute references in the configuration.
+
+    - id: 6
+      type: multiple_choice
+      question: "Which lifecycle setting minimises downtime during resource replacement?"
+      options:
+        - "prevent_destroy = true"
+        - "ignore_changes = [all]"
+        - "create_before_destroy = true"
+        - "replace_triggered_by = []"
+      correct: 2
+      explanation: |
+        create_before_destroy = true reverses the default destroy-then-create order.
+        Terraform creates the new resource first, then destroys the old one — useful
+        for zero-downtime replacements of load balancer target groups, certificates, etc.
+
+    - id: 7
+      type: true_false
+      question: "ignore_changes prevents Terraform from ever modifying the listed attributes."
+      correct: false
+      explanation: |
+        ignore_changes tells Terraform to not plan updates to those attributes if
+        they drift from the configuration. However, Terraform will still set those
+        attributes when the resource is first created. It only ignores subsequent
+        drift, not the initial creation.
+
+    - id: 8
+      type: multiple_choice
+      question: "You have for_each = toset([\"a\", \"b\", \"c\"]) and later remove \"b\". What happens?"
+      options:
+        - "Terraform destroys all three instances and recreates \"a\" and \"c\""
+        - "Terraform destroys only the instance with key \"b\" and leaves \"a\" and \"c\" untouched"
+        - "Terraform errors because you cannot remove items from a set"
+        - "Terraform renames \"c\" to \"b\" to fill the gap"
+      correct: 1
+      explanation: |
+        for_each tracks instances by their string key. Removing \"b\" from the set
+        removes only that specific instance. Instances \"a\" and \"c\" are completely
+        unaffected — no destroy, no recreate.
+
+lab:
+  title: "Use for_each to Create Three S3 Buckets from a Map"
+  description: |
+    Practice using for_each with a map variable to create multiple S3 buckets,
+    each with distinct names and purpose tags. Then add a lifecycle block to
+    one of them.
+  instructions: |
+    1. Declare a variable "buckets" of type map(string) with default values:
+       - logs    = "my-org-app-logs"
+       - assets  = "my-org-app-assets"
+       - backups = "my-org-app-backups"
+    2. Write an aws_s3_bucket resource named "app" using for_each = var.buckets.
+       - Set bucket = each.value
+       - Add tags: Purpose = each.key and ManagedBy = "terraform"
+    3. Add an aws_s3_bucket_versioning resource named "app" using
+       for_each = var.buckets, linked to aws_s3_bucket.app[each.key].id,
+       with versioning enabled only for the "backups" key
+       (status = each.key == "backups" ? "Enabled" : "Disabled").
+    4. Add an output "bucket_arns" that returns a map of each.key to ARN
+       using a for expression: { for k, v in aws_s3_bucket.app : k => v.arn }
+  starter_hcl: |
+    variable "buckets" {
+      type = map(string)
+      default = {
+        logs    = "my-org-app-logs"
+        assets  = "my-org-app-assets"
+        backups = "my-org-app-backups"
+      }
+    }
+
+    resource "aws_s3_bucket" "app" {
+      for_each = ""  # Reference var.buckets
+
+      bucket = ""  # Use each.value
+
+      tags = {
+        Purpose   = ""  # Use each.key
+        ManagedBy = "terraform"
+      }
+    }
+
+    resource "aws_s3_bucket_versioning" "app" {
+      for_each = ""  # Reference var.buckets
+      bucket   = ""  # aws_s3_bucket.app[each.key].id
+
+      versioning_configuration {
+        status = ""  # each.key == "backups" ? "Enabled" : "Disabled"
+      }
+    }
+
+    output "bucket_arns" {
+      value = { for k, v in aws_s3_bucket.app : k => v.arn }
+    }
+  validation:
+    patterns:
+      - pattern: "for_each\\s*=\\s*var\\.buckets"
+        message: "Set for_each = var.buckets on the aws_s3_bucket resource"
+      - pattern: "bucket\\s*=\\s*each\\.value"
+        message: "Set bucket = each.value to use the map value as the bucket name"
+      - pattern: "Purpose\\s*=\\s*each\\.key"
+        message: "Set the Purpose tag to each.key"
+      - pattern: "aws_s3_bucket\\.app\\[each\\.key\\]\\.id"
+        message: "Reference the bucket with aws_s3_bucket.app[each.key].id in the versioning resource"
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this for_each configuration creating S3 buckets from a map. Check that
+      for_each is applied correctly to both resources, the versioning conditional
+      logic is correct, the bucket reference in the versioning resource uses the
+      right key, and the output uses a valid for expression. Comment on why for_each
+      is preferable to count here.
+  hints:
+    - "for_each on a resource takes a map or set — reference it as for_each = var.buckets"
+    - "Inside a for_each resource, each.key is the map key and each.value is the map value"
+    - "To reference one for_each instance from another resource: resource_type.name[each.key]"

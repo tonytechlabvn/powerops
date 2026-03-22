@@ -1028,3 +1028,44 @@ class StackTemplate(Base):
 
     def __repr__(self) -> str:
         return f"<StackTemplate name={self.name!r}>"
+
+
+# ---------------------------------------------------------------------------
+# Phase 12: Knowledge Base — per-user curriculum progress
+# ---------------------------------------------------------------------------
+
+
+class KBUserProgress(Base):
+    """Per-user progress for KB curriculum chapters."""
+    __tablename__ = "kb_user_progress"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    chapter_slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_started")
+    quiz_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quiz_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lab_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    lab_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lab_validation_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "chapter_slug", name="uq_kb_user_chapter"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<KBUserProgress user={self.user_id!r} chapter={self.chapter_slug!r} status={self.status!r}>"

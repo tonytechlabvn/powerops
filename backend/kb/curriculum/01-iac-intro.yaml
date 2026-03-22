@@ -1,0 +1,261 @@
+name: iac-intro
+title: "What is Infrastructure as Code?"
+order: 1
+difficulty: beginner
+estimated_minutes: 15
+prerequisites: []
+concepts: []
+powerops_features: []
+description: |
+  Discover why Infrastructure as Code (IaC) exists, what problems it solves,
+  and where Terraform fits in the modern DevOps toolchain.
+
+content:
+  sections:
+    - title: "What is Infrastructure"
+      body: |
+        Infrastructure is everything your application needs to run: servers, networks,
+        databases, load balancers, storage, DNS records, and more. Traditionally,
+        engineers created this infrastructure by clicking through web consoles (like
+        the AWS Management Console) or by running a sequence of manual commands on
+        the command line.
+
+        This approach worked fine when applications were small and teams were tiny.
+        But as organisations grew, so did their infrastructure. A single web application
+        might now span dozens of servers across multiple regions, with databases,
+        caches, message queues, and CDN configurations all needing to be in sync.
+
+        Doing all of this by hand is slow, error-prone, and impossible to audit.
+        If something breaks at 2 AM, can you recreate the entire environment from
+        scratch in minutes? With manual infrastructure, the honest answer is usually
+        no — and that's a serious problem.
+
+        The solution is to treat your infrastructure the same way you treat your
+        application code: write it down, version it, review it, and automate it.
+        That's the core idea behind Infrastructure as Code.
+      hcl_example: null
+
+    - title: "The Problem: Manual Infrastructure"
+      body: |
+        Manual infrastructure management creates a category of problems that are
+        sometimes called "snowflake servers." Each server is unique — built up over
+        months of one-off changes — and nobody quite knows what's on it. The person
+        who originally set it up has left the company. The runbook is out of date.
+
+        Here are the most common pain points teams experience:
+
+        Inconsistency: Your staging environment was set up three months before production.
+        Small differences have crept in. A bug in staging doesn't reproduce in production,
+        or vice versa, costing hours of debugging time.
+
+        No audit trail: Who opened port 22 on that server? When? Why? Manual changes
+        leave no record. You can't roll back a click the way you can roll back a git commit.
+
+        Slow provisioning: Spinning up a new environment for a new team member takes
+        days, not minutes. Each step must be remembered and redone by hand.
+
+        Configuration drift: Over time, servers diverge from their intended state
+        as patches, hotfixes, and experimental changes accumulate. Drift is silent and
+        dangerous — it can cause outages that are nearly impossible to diagnose.
+
+        These problems are not unique to any one cloud or company. Every team that
+        manages infrastructure manually eventually hits them.
+      hcl_example: null
+
+    - title: "Infrastructure as Code"
+      body: |
+        Infrastructure as Code (IaC) means describing your infrastructure in text
+        files — code — and using tooling to apply that description to real systems.
+        Instead of clicking "Launch Instance" in a console, you write a file that says
+        "I want an EC2 instance with these properties" and a tool reads that file and
+        creates the instance for you.
+
+        The benefits are transformative:
+
+        Reproducibility: Because the infrastructure is described in code, you can
+        create identical environments on demand. Staging, QA, and production can all
+        be generated from the same source of truth.
+
+        Version control: IaC files live in git. Every change is tracked with a commit
+        message, author, and timestamp. You can diff any two points in history and
+        understand exactly what changed.
+
+        Collaboration: Pull requests and code reviews apply to infrastructure changes,
+        just like application code. Teams can catch mistakes before they reach production.
+
+        Automation: IaC plugs naturally into CI/CD pipelines. Infrastructure can be
+        validated and applied automatically as part of a deployment workflow.
+
+        Documentation: Well-written IaC files serve as living documentation of your
+        architecture. Reading the code tells you exactly what exists and how it's configured.
+      hcl_example: null
+
+    - title: "Why Terraform"
+      body: |
+        Terraform is an open-source IaC tool created by HashiCorp in 2014. It has
+        become the industry standard for cloud infrastructure provisioning, and for
+        good reason.
+
+        Declarative syntax: You describe the desired end state of your infrastructure,
+        not the steps to get there. Terraform figures out the sequence of API calls
+        needed. This is much easier to reason about than imperative scripts.
+
+        Multi-cloud: Terraform uses a provider plugin system. There are providers for
+        AWS, Azure, GCP, Kubernetes, GitHub, Cloudflare, Datadog, and hundreds of
+        other services. One tool, one workflow, every platform.
+
+        Plan before apply: Terraform's "plan" step shows you exactly what will change
+        before anything is touched. This is a safety net that manual processes lack
+        entirely.
+
+        State management: Terraform tracks what resources it manages in a state file.
+        This lets it calculate the minimum set of changes needed to move from the
+        current state to the desired state — no unnecessary recreations.
+
+        Community and ecosystem: Terraform has a vast library of reusable modules on
+        the Terraform Registry, an active community, and years of production battle-testing.
+        Whatever infrastructure pattern you need, someone has likely already solved it.
+      hcl_example: null
+
+    - title: "Terraform vs Alternatives"
+      body: |
+        You may have heard of other IaC tools. Here's how Terraform compares to the
+        most common alternatives:
+
+        AWS CloudFormation: AWS's own IaC tool. It's deeply integrated with AWS
+        services but only works with AWS. If you use multiple clouds or need to manage
+        non-AWS resources (like a GitHub repository or a DNS record), CloudFormation
+        can't help. Terraform covers all of these.
+
+        Ansible: Ansible is primarily a configuration management tool — it's excellent
+        at configuring software on existing servers. Terraform is better at provisioning
+        the servers themselves. The two tools are often used together: Terraform creates
+        the infrastructure, Ansible configures the software on top of it.
+
+        Pulumi: Pulumi lets you write infrastructure using general-purpose programming
+        languages like Python, TypeScript, or Go. This is powerful for teams with strong
+        software development backgrounds. Terraform uses its own domain-specific language
+        (HCL), which is simpler and more readable for infrastructure-specific tasks.
+
+        The right choice depends on your context, but Terraform's combination of
+        multi-cloud support, declarative syntax, strong community, and excellent tooling
+        makes it the most versatile and widely-adopted option available today.
+      hcl_example: null
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "What is the primary benefit of Infrastructure as Code over manual console-based provisioning?"
+      options:
+        - "It is faster to click through a GUI than to write code"
+        - "Infrastructure changes are tracked in version control and can be reviewed and automated"
+        - "It eliminates the need for cloud providers"
+        - "It only works with AWS"
+      correct: 1
+      explanation: |
+        IaC files live in git, enabling version history, code review, and CI/CD automation —
+        none of which are possible with manual console changes.
+
+    - id: 2
+      type: multiple_choice
+      question: "What does 'declarative' mean in the context of Terraform?"
+      options:
+        - "You write step-by-step instructions for Terraform to follow"
+        - "You describe only the resources you want to destroy"
+        - "You describe the desired end state and Terraform determines how to achieve it"
+        - "You must specify every API call Terraform makes"
+      correct: 2
+      explanation: |
+        Declarative means you declare WHAT you want, not HOW to get there.
+        Terraform's engine plans the sequence of API calls required.
+
+    - id: 3
+      type: true_false
+      question: "Terraform can only manage resources on AWS."
+      correct: false
+      explanation: |
+        Terraform uses a provider plugin system with hundreds of providers covering
+        AWS, Azure, GCP, Kubernetes, GitHub, Cloudflare, and many more.
+
+    - id: 4
+      type: multiple_choice
+      question: "What problem do 'snowflake servers' illustrate?"
+      options:
+        - "Servers that are too cold and need heating"
+        - "Unique, manually-configured servers that cannot be reliably reproduced"
+        - "Servers that only run in winter months"
+        - "Servers configured entirely with Terraform"
+      correct: 1
+      explanation: |
+        'Snowflake servers' are unique servers built through months of manual
+        changes, making them impossible to reproduce reliably.
+
+    - id: 5
+      type: multiple_choice
+      question: "Which Terraform feature lets you preview changes before they are applied?"
+      options:
+        - "terraform apply"
+        - "terraform init"
+        - "terraform plan"
+        - "terraform validate"
+      correct: 2
+      explanation: |
+        'terraform plan' compares your configuration against the current state
+        and shows exactly what will change — without touching any real resources.
+
+    - id: 6
+      type: true_false
+      question: "Configuration drift occurs when servers diverge from their intended state over time."
+      correct: true
+      explanation: |
+        Drift happens silently as patches, hotfixes, and ad-hoc changes accumulate
+        on servers. IaC helps prevent drift by enforcing a single source of truth.
+
+lab:
+  title: "Articulate the IaC Value Proposition"
+  description: |
+    Before writing any HCL, it's important to understand WHY we use IaC.
+    In this lab you will write a structured comment block that summarises
+    the core benefits of Infrastructure as Code in your own words.
+  instructions: |
+    1. In the editor below, write a Terraform-style comment block (using # for line comments).
+    2. Your comment block must include at least three distinct benefits of IaC.
+    3. For each benefit, write 1-2 sentences explaining why it matters to a real team.
+    4. Include the word "reproducibility", "version control", and "automation" somewhere in your comments.
+    5. Save your work when you are satisfied.
+  starter_hcl: |
+    # ============================================================
+    # Infrastructure as Code — Value Proposition
+    # ============================================================
+    #
+    # Benefit 1: [Your benefit here]
+    # [Your explanation here]
+    #
+    # Benefit 2: [Your benefit here]
+    # [Your explanation here]
+    #
+    # Benefit 3: [Your benefit here]
+    # [Your explanation here]
+    #
+  validation:
+    patterns:
+      - pattern: "(?i)reproducib"
+        message: "Include the concept of reproducibility in your comments"
+      - pattern: "(?i)version.control|git"
+        message: "Mention version control or git in your comments"
+      - pattern: "(?i)automat"
+        message: "Include the concept of automation in your comments"
+      - pattern: "#.{10,}"
+        message: "Your comment lines should contain meaningful content (at least 10 chars each)"
+    terraform_validate: false
+    ai_review_prompt: |
+      Review this comment block written by a Terraform beginner. Check that it
+      demonstrates genuine understanding of IaC benefits (reproducibility, version
+      control, automation). Provide encouraging feedback and suggest one thing
+      they could add to deepen their understanding.
+  hints:
+    - "Think about what happens when a server crashes at 3 AM — how does IaC help?"
+    - "Consider how your team currently reviews application code changes and apply the same thinking to infrastructure"
+    - "Automation connects IaC to CI/CD pipelines — why does that matter for deployment frequency?"

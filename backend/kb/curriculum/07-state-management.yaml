@@ -1,0 +1,434 @@
+name: state-management
+title: "State Management"
+order: 7
+difficulty: intermediate
+estimated_minutes: 30
+prerequisites:
+  - iac-intro
+  - hcl-syntax
+  - providers-init
+  - resources
+  - variables-outputs
+  - data-sources
+concepts:
+  - state
+  - backend
+  - workspace
+powerops_features: []
+description: |
+  Understand Terraform state — what it is, why it exists, and how to manage it
+  safely using remote backends, locking, and best practices for teams.
+
+content:
+  sections:
+    - title: "What is State"
+      body: |
+        Terraform state is a JSON file (terraform.tfstate) that records the current
+        real-world status of every resource Terraform manages. It is the bridge
+        between your configuration (what you want) and reality (what exists).
+
+        Without state, Terraform would have no memory. Every time you ran plan,
+        it would have no idea which resources already exist and would try to create
+        everything from scratch. State is what lets Terraform calculate the minimal
+        diff — create only what's missing, update only what changed, leave everything
+        else alone.
+
+        State stores several pieces of information for each resource:
+          - The resource type and local name (e.g., aws_s3_bucket.app_data)
+          - The provider-assigned ID (e.g., arn:aws:s3:::my-bucket)
+          - All attribute values as they were last seen (including computed attributes)
+          - Dependencies on other resources
+
+        The state file is updated after every successful apply. If an apply partially
+        fails, the state reflects only the resources that were successfully created
+        or modified — Terraform uses this on the next run to continue from where
+        it left off.
+
+        By default, state is stored locally in terraform.tfstate in your working
+        directory. This works fine for solo development but breaks down immediately
+        in a team environment — two people cannot safely run Terraform simultaneously
+        against the same local state file. Remote backends solve this problem.
+      hcl_example: null
+
+    - title: "State Commands"
+      body: |
+        Terraform provides several CLI commands for inspecting and manipulating state.
+        Use these carefully — incorrect state modifications can cause Terraform to
+        lose track of resources or attempt to create duplicates.
+
+        terraform show: Prints the current state in a human-readable format.
+        Great for quickly seeing what Terraform knows about your infrastructure.
+
+        terraform state list: Lists all resources currently tracked in state.
+        Output is one resource address per line, e.g., aws_s3_bucket.app_data.
+
+        terraform state show <address>: Prints all known attributes for a specific
+        resource. For example: terraform state show aws_instance.web.
+
+        terraform state mv <source> <destination>: Moves a resource from one address
+        to another in state without touching the real infrastructure. Use this when
+        you rename a resource in your configuration to avoid unnecessary destroy/create.
+
+        terraform state rm <address>: Removes a resource from state without deleting
+        the real infrastructure. Useful when you want Terraform to stop managing a
+        resource (e.g., before importing it into a different configuration).
+
+        terraform import <address> <id>: Brings an existing real resource into
+        Terraform state so Terraform can manage it going forward. The resource block
+        must already exist in your configuration. Import is covered in depth in
+        the Advanced Patterns chapter.
+
+        Always take a backup of your state before running state mv or state rm.
+        Run terraform state pull > backup.tfstate first.
+      hcl_example: |
+        # Common state CLI operations (not HCL — these are shell commands):
+        #
+        # List all managed resources:
+        # $ terraform state list
+        #
+        # Show details for a specific resource:
+        # $ terraform state show aws_s3_bucket.app_data
+        #
+        # Rename a resource in state (no infra changes):
+        # $ terraform state mv aws_s3_bucket.old_name aws_s3_bucket.new_name
+        #
+        # Back up state before risky operations:
+        # $ terraform state pull > backup-$(date +%Y%m%d).tfstate
+
+    - title: "Remote Backends"
+      body: |
+        A backend determines where Terraform stores its state file and performs
+        state locking. Moving from local to remote state is one of the first things
+        a team should do when adopting Terraform for real projects.
+
+        The most common remote backend for AWS teams is the S3 backend, which stores
+        state in an S3 bucket. Combined with DynamoDB for locking (covered in the
+        next section), this is a robust, low-cost solution used by thousands of teams.
+
+        Other popular backends include:
+          - Terraform Cloud / HCP Terraform: HashiCorp's hosted backend with built-in
+            locking, versioning, team access controls, and a UI
+          - Azure Blob Storage: The S3 equivalent for Azure teams
+          - Google Cloud Storage: GCS-based backend for GCP teams
+          - Consul: HashiCorp's service mesh, also supports state storage
+
+        Configuring a remote backend is done in the terraform block's backend
+        sub-block. After changing your backend configuration, run terraform init
+        again — Terraform will prompt you to migrate existing state to the new
+        location.
+
+        Key benefits of remote backends:
+          - State is shared across your team — everyone runs against the same state
+          - State is versioned — you can recover from accidental corruption
+          - State is stored outside your laptop — no risk of losing it
+          - State locking prevents concurrent apply operations
+          - Access control — only authorised users/roles can read or write state
+
+        Never commit the terraform.tfstate file to git. It often contains sensitive
+        values (passwords, private keys, connection strings) and can grow very large.
+        Add it to .gitignore from day one.
+      hcl_example: |
+        terraform {
+          required_version = ">= 1.5.0"
+
+          backend "s3" {
+            bucket         = "my-company-terraform-state"
+            key            = "prod/app/terraform.tfstate"
+            region         = "us-east-1"
+            encrypt        = true
+
+            # DynamoDB table for state locking
+            dynamodb_table = "terraform-state-locks"
+          }
+
+          required_providers {
+            aws = {
+              source  = "hashicorp/aws"
+              version = "~> 5.0"
+            }
+          }
+        }
+
+    - title: "State Locking"
+      body: |
+        State locking prevents two Terraform processes from modifying state at the
+        same time. Without locking, concurrent applies can corrupt the state file —
+        both processes read the same state, make changes, and then write conflicting
+        updates back.
+
+        When Terraform starts an apply (or any operation that modifies state), it
+        acquires a lock. Any other Terraform process that tries to run simultaneously
+        sees the lock and waits (or errors, depending on configuration). When the
+        first apply completes, the lock is released.
+
+        For the S3 backend, locking is implemented using a DynamoDB table. Terraform
+        writes a lock item to the table when it starts an operation and deletes it
+        when it finishes. You must create this DynamoDB table before configuring
+        the backend — Terraform does not create it automatically.
+
+        The DynamoDB table must have:
+          - A partition key named LockID of type String
+          - Pay-per-request billing (or provisioned with low capacity — locking is infrequent)
+
+        If a Terraform process is killed mid-apply (e.g., your laptop crashes), the
+        lock may not be released. You can force-unlock with:
+          terraform force-unlock <lock-id>
+
+        Only use force-unlock when you are certain no other process is running.
+        Unlocking while another apply is in progress can cause state corruption.
+
+        Teams using Terraform Cloud or HCP Terraform get locking automatically
+        without needing to configure DynamoDB separately.
+      hcl_example: |
+        # Create the S3 bucket and DynamoDB table for state management
+        # (Run this once before configuring the backend)
+
+        resource "aws_s3_bucket" "terraform_state" {
+          bucket = "my-company-terraform-state"
+
+          # Prevent accidental deletion of this critical bucket
+          lifecycle {
+            prevent_destroy = true
+          }
+        }
+
+        resource "aws_s3_bucket_versioning" "terraform_state" {
+          bucket = aws_s3_bucket.terraform_state.id
+          versioning_configuration {
+            status = "Enabled"
+          }
+        }
+
+        resource "aws_dynamodb_table" "terraform_locks" {
+          name         = "terraform-state-locks"
+          billing_mode = "PAY_PER_REQUEST"
+          hash_key     = "LockID"
+
+          attribute {
+            name = "LockID"
+            type = "S"
+          }
+        }
+
+    - title: "State Security"
+      body: |
+        The Terraform state file can contain highly sensitive information. When
+        Terraform creates an RDS database, for example, the master password may
+        appear in plain text in the state file. IAM access keys, private certificates,
+        and connection strings are all examples of sensitive data that can end up
+        in state.
+
+        Treat the state file with the same security posture as your most sensitive
+        configuration data. Here are the essential practices:
+
+        Enable encryption at rest: For S3 backends, enable server-side encryption
+        (SSE) on the bucket. Add encrypt = true to the backend configuration —
+        this tells Terraform to encrypt the state file using AES-256 before writing
+        it to S3.
+
+        Restrict access: Use S3 bucket policies and IAM policies to limit who can
+        read and write state. Only the CI/CD role and approved administrators should
+        have access. Block all public access on the state bucket.
+
+        Enable versioning: S3 bucket versioning keeps a history of every state
+        version. If state is accidentally corrupted or a bad apply makes things
+        worse, you can restore a previous version.
+
+        Audit access: Enable S3 access logging and CloudTrail to create an audit
+        trail of every state read and write operation.
+
+        Avoid secrets in state where possible: Use data sources to read secrets
+        from AWS Secrets Manager or SSM Parameter Store rather than storing them
+        in variables that end up in state. The sensitive = true flag on variables
+        and outputs prevents them from appearing in CLI output but does not
+        prevent them from being written to state.
+      hcl_example: |
+        # Enforce encryption and block public access on the state bucket
+
+        resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
+          bucket = aws_s3_bucket.terraform_state.id
+
+          rule {
+            apply_server_side_encryption_by_default {
+              sse_algorithm = "AES256"
+            }
+          }
+        }
+
+        resource "aws_s3_bucket_public_access_block" "state" {
+          bucket = aws_s3_bucket.terraform_state.id
+
+          block_public_acls       = true
+          block_public_policy     = true
+          ignore_public_acls      = true
+          restrict_public_buckets = true
+        }
+
+quiz:
+  passing_score: 70
+  questions:
+    - id: 1
+      type: multiple_choice
+      question: "What is the primary purpose of the Terraform state file?"
+      options:
+        - "To store provider credentials securely"
+        - "To record the current real-world status of managed resources so Terraform can calculate diffs"
+        - "To cache provider plugin binaries between runs"
+        - "To document the history of every apply operation"
+      correct: 1
+      explanation: |
+        State is Terraform's memory of what it manages. It maps configuration
+        resources to real infrastructure objects and stores attribute values,
+        enabling Terraform to calculate the minimal set of changes on each run.
+
+    - id: 2
+      type: true_false
+      question: "It is safe to commit the terraform.tfstate file to a public git repository."
+      correct: false
+      explanation: |
+        State files often contain sensitive values like passwords, private keys,
+        and connection strings in plain text. They must never be committed to git,
+        especially not public repositories. Use a remote backend instead.
+
+    - id: 3
+      type: multiple_choice
+      question: "What does 'terraform state mv' do?"
+      options:
+        - "Moves the state file to a different directory"
+        - "Renames a resource in state without changing real infrastructure"
+        - "Migrates state from local to a remote backend"
+        - "Moves a resource to a different AWS region"
+      correct: 1
+      explanation: |
+        terraform state mv renames a resource's address in the state file. This
+        lets you rename a resource block in your configuration without Terraform
+        destroying and recreating the real infrastructure.
+
+    - id: 4
+      type: multiple_choice
+      question: "What DynamoDB attribute name does the S3 backend use for state locking?"
+      options:
+        - "StateKey"
+        - "TerraformLock"
+        - "LockID"
+        - "terraform_state_lock"
+      correct: 2
+      explanation: |
+        The S3 backend requires a DynamoDB table with a partition key named exactly
+        "LockID" of type String. This exact name is required — the backend will not
+        work with a different key name.
+
+    - id: 5
+      type: multiple_choice
+      question: "Which command backs up your state to a local file before risky operations?"
+      options:
+        - "terraform state backup"
+        - "terraform state pull > backup.tfstate"
+        - "terraform backup state"
+        - "cp terraform.tfstate backup.tfstate"
+      correct: 1
+      explanation: |
+        terraform state pull fetches the current state and prints it to stdout.
+        Redirecting to a file (> backup.tfstate) creates a local backup. This works
+        for both local and remote backends.
+
+    - id: 6
+      type: true_false
+      question: "Terraform Cloud provides state locking automatically without needing a DynamoDB table."
+      correct: true
+      explanation: |
+        Terraform Cloud and HCP Terraform include built-in state storage and locking.
+        DynamoDB is only needed when using the S3 backend on your own infrastructure.
+
+    - id: 7
+      type: multiple_choice
+      question: "What should you do before running 'terraform force-unlock'?"
+      options:
+        - "Run terraform plan first to check for changes"
+        - "Confirm that no other Terraform process is currently running against the same state"
+        - "Delete the DynamoDB lock table and recreate it"
+        - "Run terraform init to refresh the backend connection"
+      correct: 1
+      explanation: |
+        Force-unlock removes the lock without checking if another process is running.
+        If another apply is genuinely in progress, force-unlocking it can cause state
+        corruption. Only use it when you are certain the lock is stale (e.g., left
+        over from a crashed process).
+
+lab:
+  title: "Configure an S3 Backend with DynamoDB Locking"
+  description: |
+    Write the Terraform configuration to create the S3 bucket and DynamoDB table
+    needed for remote state storage, then configure the S3 backend.
+  instructions: |
+    1. Write an aws_s3_bucket resource named "tf_state" with bucket = "my-org-terraform-state".
+    2. Add an aws_s3_bucket_versioning resource to enable versioning on the bucket.
+    3. Write an aws_dynamodb_table resource named "tf_locks" with:
+       - name = "terraform-state-locks"
+       - billing_mode = "PAY_PER_REQUEST"
+       - hash_key = "LockID"
+       - An attribute block: name = "LockID", type = "S"
+    4. In the terraform{} block, add a backend "s3" {} configuration pointing to
+       the bucket "my-org-terraform-state", key "global/terraform.tfstate",
+       region "us-east-1", encrypt = true, and dynamodb_table = "terraform-state-locks".
+  starter_hcl: |
+    terraform {
+      required_version = ">= 1.5.0"
+
+      backend "s3" {
+        bucket         = ""               # Fill in: my-org-terraform-state
+        key            = ""               # Fill in: global/terraform.tfstate
+        region         = ""               # Fill in: us-east-1
+        encrypt        = true
+        dynamodb_table = ""               # Fill in: terraform-state-locks
+      }
+
+      required_providers {
+        aws = {
+          source  = "hashicorp/aws"
+          version = "~> 5.0"
+        }
+      }
+    }
+
+    resource "aws_s3_bucket" "tf_state" {
+      bucket = ""  # Fill in: my-org-terraform-state
+    }
+
+    resource "aws_s3_bucket_versioning" "tf_state" {
+      bucket = aws_s3_bucket.tf_state.id
+      versioning_configuration {
+        status = ""  # Fill in: Enabled
+      }
+    }
+
+    resource "aws_dynamodb_table" "tf_locks" {
+      name         = ""               # Fill in: terraform-state-locks
+      billing_mode = "PAY_PER_REQUEST"
+      hash_key     = ""               # Fill in: LockID
+
+      attribute {
+        name = ""  # Fill in: LockID
+        type = ""  # Fill in: S
+      }
+    }
+  validation:
+    patterns:
+      - pattern: "backend\\s+\"s3\""
+        message: "Configure an S3 backend in the terraform block"
+      - pattern: "encrypt\\s*=\\s*true"
+        message: "Set encrypt = true in the backend configuration"
+      - pattern: "dynamodb_table\\s*=\\s*\"terraform-state-locks\""
+        message: "Reference the DynamoDB table in the backend configuration"
+      - pattern: "hash_key\\s*=\\s*\"LockID\""
+        message: "Set the DynamoDB hash_key to \"LockID\""
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this S3 remote backend and DynamoDB locking configuration. Check that
+      the backend block is complete and correct, the S3 bucket has versioning enabled,
+      the DynamoDB table has the correct key schema, and encryption is configured.
+      Suggest any security hardening improvements.
+  hints:
+    - "The backend block goes inside the terraform{} block, not at the top level"
+    - "The DynamoDB attribute name must be exactly \"LockID\" — this is case-sensitive"
+    - "Versioning status must be the string \"Enabled\" (capital E) — not true or enabled"
