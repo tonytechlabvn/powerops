@@ -85,17 +85,18 @@ async def keycloak_callback(request: Request):
 
     # Exchange auth code for tokens at Keycloak
     token_url = f"{s.keycloak_url}/realms/{s.keycloak_realm}/protocol/openid-connect/token"
+    # Use the frontend public client for code exchange (must match the client_id
+    # that initiated the auth request in the browser)
+    frontend_client_id = "powerops-frontend"
     token_data = {
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": redirect_uri,
-        "client_id": s.keycloak_client_id,
+        "client_id": frontend_client_id,
     }
     # PKCE: include code_verifier for proof of possession
     if code_verifier:
         token_data["code_verifier"] = code_verifier
-    if s.keycloak_client_secret:
-        token_data["client_secret"] = s.keycloak_client_secret
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(token_url, data=token_data)
@@ -137,7 +138,7 @@ async def refresh_token(request: Request):
     token_data = {
         "grant_type": "refresh_token",
         "refresh_token": refresh,
-        "client_id": s.keycloak_client_id,
+        "client_id": "powerops-frontend",
     }
     if s.keycloak_client_secret:
         token_data["client_secret"] = s.keycloak_client_secret
@@ -170,7 +171,7 @@ async def logout(request: Request):
         try:
             async with httpx.AsyncClient() as client:
                 await client.post(logout_url, data={
-                    "client_id": s.keycloak_client_id,
+                    "client_id": "powerops-frontend",
                     "refresh_token": refresh,
                 })
         except Exception as exc:
