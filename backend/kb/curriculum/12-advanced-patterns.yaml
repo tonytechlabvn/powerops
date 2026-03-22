@@ -1,5 +1,5 @@
 name: advanced-patterns
-title: "Advanced — Policies, Stacks & Best Practices"
+title: "Advanced Patterns"
 order: 12
 difficulty: advanced
 estimated_minutes: 35
@@ -19,106 +19,288 @@ concepts:
   - provisioner
 powerops_features:
   - policy-editor
-description: >
+description: |
   Explore advanced Terraform patterns including policy as code, stacks,
-  importing existing infrastructure, troubleshooting, and best practices.
+  importing existing infrastructure, troubleshooting techniques, and a
+  summary of best practices for production-grade configurations.
 
 content:
   sections:
     - title: "Policy as Code"
       body: |
-        Policy as code enforces organizational rules on infrastructure changes automatically.
-        Two popular frameworks exist:
+        As your Terraform usage grows, you need guardrails that go beyond what
+        HCL syntax validation can provide. Policy as code lets you define rules
+        that every Terraform plan must satisfy before it can be applied — rules
+        like "all resources must have a cost-center tag," "no EC2 instances
+        larger than m5.xlarge in development," or "S3 buckets must have
+        encryption enabled."
 
-        OPA (Open Policy Agent) uses the Rego language to evaluate Terraform plan JSON.
-        Policies can check naming conventions, required tags, allowed instance types,
-        or security rules like "no public S3 buckets."
+        Two major policy frameworks integrate with Terraform:
 
-        Sentinel is HashiCorp's enterprise policy framework, available in Terraform Cloud.
-        It integrates directly into the plan/apply workflow.
+        HashiCorp Sentinel: A policy-as-code framework built into Terraform Cloud
+        and HCP Terraform. Sentinel policies are written in the Sentinel language
+        and can inspect the full plan JSON — resource types, attribute values,
+        counts, and computed values. Policies can be advisory (warn but allow) or
+        mandatory (block the apply entirely).
 
-        Policies have enforcement levels: advisory (warn only), soft-mandatory (can override),
-        and hard-mandatory (always block). This lets teams gradually adopt policy compliance.
-      hcl_example: null
+        Open Policy Agent (OPA): A general-purpose policy engine used across the
+        cloud-native ecosystem. OPA policies are written in the Rego language. You
+        integrate OPA with Terraform by running conftest — a tool that evaluates
+        terraform plan -out output against OPA policies in your CI/CD pipeline.
 
-    - title: "Stacks — Multi-Module Composition"
-      body: |
-        A stack combines multiple Terraform modules into a single deployable unit.
-        Each module handles one concern (networking, compute, database) and the stack
-        orchestrates them in dependency order.
+        The key benefit of policy as code is consistency at scale. Once a policy
+        is written, it applies to every plan run by every team member and every
+        CI/CD pipeline, with no exceptions. It automates governance that would
+        otherwise require manual checklist review.
 
-        Stacks solve the problem of managing complex infrastructure that spans multiple
-        modules with inter-dependencies. Instead of running terraform apply in each
-        module directory manually, the stack handles the execution order.
+        Common policy categories:
+          - Tagging: all resources must carry Environment, CostCenter, ManagedBy tags
+          - Cost controls: maximum allowed instance sizes, no reserved instance changes without approval
+          - Security: no public S3 buckets, encryption required, no 0.0.0.0/0 ingress on SSH
+          - Compliance: specific approved regions only, required KMS key types
 
-        In PowerOps, the Stack Composer lets you visually build stacks from registry
-        modules, define input mappings between modules, and execute the entire stack
-        with a single command.
-      hcl_example: null
-
-    - title: "Import & Adoption"
-      body: |
-        terraform import brings existing infrastructure under Terraform management.
-        This is essential when adopting Terraform in an organization that already has
-        running infrastructure created manually or with other tools.
-
-        The workflow: write the resource configuration first, then run
-        terraform import <resource_address> <cloud_resource_id>. Terraform
-        adds the resource to state without creating or modifying it.
-
-        After import, run terraform plan to verify no changes are detected.
-        If there are differences, adjust your configuration to match reality.
+        Enforcement levels allow gradual adoption. Start with advisory policies
+        (warn but allow) so teams can see violations without being blocked. Promote
+        to mandatory once teams have had time to bring their configurations into
+        compliance.
       hcl_example: |
-        # Step 1: Write the resource config
-        resource "aws_s3_bucket" "existing" {
-          bucket = "my-existing-bucket-12345"
+        # OPA/Conftest policy in Rego (not HCL — illustrative only):
+        # File: policies/require-tags.rego
+        #
+        # package terraform.require_tags
+        #
+        # required_tags := {"Environment", "CostCenter", "ManagedBy"}
+        #
+        # deny[msg] {
+        #   resource := input.resource_changes[_]
+        #   resource.change.actions[_] == "create"
+        #   provided := {tag | resource.change.after.tags[tag]}
+        #   missing   := required_tags - provided
+        #   count(missing) > 0
+        #   msg := sprintf(
+        #     "Resource %v is missing required tags: %v",
+        #     [resource.address, missing]
+        #   )
+        # }
+        #
+        # Run with:
+        # terraform plan -out=tfplan.binary
+        # terraform show -json tfplan.binary > tfplan.json
+        # conftest test tfplan.json --policy policies/
 
-          tags = {
-            Environment = "production"
-            ManagedBy   = "terraform"
+    - title: "Stacks"
+      body: |
+        As infrastructure grows, a single Terraform configuration managing hundreds
+        of resources becomes unwieldy. Large configurations have long plan and apply
+        times, high blast radius for mistakes, and complex dependency graphs that are
+        hard to reason about.
+
+        The solution is to split infrastructure into stacks — separate Terraform
+        configurations, each with its own state file, managing a cohesive set of
+        resources. Each stack has a clear boundary and a well-defined interface.
+
+        Common stack decomposition patterns:
+
+        Layer-based stacks:
+          - networking: VPCs, subnets, route tables, Transit Gateway
+          - platform: EKS clusters, RDS instances, ElastiCache, shared IAM roles
+          - application: ECS services, Lambda functions, API Gateway, app-specific buckets
+
+        Team-based stacks: Each team owns and operates their own stack.
+          - platform-team stack: shared infrastructure consumed by all teams
+          - backend-team stack: API services and databases
+          - frontend-team stack: CDN, static hosting, edge functions
+
+        Stacks communicate through remote state references. The
+        data "terraform_remote_state" source lets one stack read the outputs of
+        another without giving it write access to that stack's state.
+
+        Terraform Stacks (introduced in Terraform 1.8) is a newer feature that
+        formalises multi-stack composition with .tfstack.hcl files, enabling
+        orchestrated deployments across multiple component configurations from a
+        single root. For most teams, the remote_state data source pattern is
+        sufficient and more widely understood.
+      hcl_example: |
+        # Reading outputs from the networking stack's remote state
+        data "terraform_remote_state" "networking" {
+          backend = "s3"
+          config = {
+            bucket = "my-org-terraform-state"
+            key    = "networking/terraform.tfstate"
+            region = "us-east-1"
           }
         }
 
-        # Step 2: Import (run in terminal)
-        # terraform import aws_s3_bucket.existing my-existing-bucket-12345
+        # Use the networking stack's VPC and subnet IDs in the application stack
+        resource "aws_instance" "app" {
+          ami           = data.aws_ami.amazon_linux.id
+          instance_type = "t3.micro"
+          subnet_id     = data.terraform_remote_state.networking.outputs.private_subnet_ids[0]
 
-    - title: "Troubleshooting Common Issues"
+          tags = {
+            Name      = "app-server"
+            ManagedBy = "terraform"
+          }
+        }
+
+    - title: "Import & Adoption"
       body: |
-        State lock errors: Another process holds the lock. Wait for it to finish,
-        or force-unlock if the process crashed (terraform force-unlock <LOCK_ID>).
+        In the real world, infrastructure rarely starts as code. Most teams adopting
+        Terraform have years of manually-created resources that need to be brought
+        under Terraform management without being deleted and recreated.
 
-        Provider authentication: Ensure credentials are configured. Check environment
-        variables, shared credentials files, or instance profiles.
+        terraform import is the command for adopting existing resources. It takes
+        a resource address (e.g., aws_s3_bucket.legacy) and the resource's real-world
+        ID (e.g., my-legacy-bucket) and records the resource in the Terraform state
+        file. The resource block must already exist in your configuration before you
+        run import.
 
-        Dependency cycles: Two resources depend on each other. Break the cycle by
-        using depends_on sparingly or restructuring your configuration.
+        After importing, run terraform plan. You will likely see diffs between your
+        configuration and the actual resource — attributes you haven't specified.
+        Work through the plan output, adding attribute values to your configuration
+        block until the plan shows "No changes." At that point, Terraform fully
+        manages the resource.
 
-        Drift detection: Run terraform plan regularly to detect manual changes.
-        Either import the changes or revert them with terraform apply.
+        Terraform 1.5 introduced import blocks — a declarative alternative to the
+        CLI command. Import blocks can be committed to git and applied as part of a
+        normal plan/apply workflow, making the import process reviewable and auditable.
+        After the import is applied, remove the import block (its work is done).
 
-        State corruption: Keep backups. Use versioned S3 buckets for remote state.
-        The terraform state pull/push commands help with manual recovery.
-      hcl_example: null
+        The moved block (Terraform 1.1+) lets you rename or relocate a resource in
+        your configuration without recreating it. Commit the moved block to git so
+        the rename is recorded in your change history. Remove it after the rename
+        has been applied across all environments.
+
+        For large-scale adoption, tools like Terraformer can reverse-engineer
+        existing AWS resources into Terraform configuration files automatically.
+        Always treat generated code as a starting point that needs review and
+        cleanup before it is production-ready.
+      hcl_example: |
+        # Declarative import block (Terraform >= 1.5)
+        import {
+          to = aws_s3_bucket.legacy_data
+          id = "my-existing-legacy-bucket"
+        }
+
+        resource "aws_s3_bucket" "legacy_data" {
+          bucket = "my-existing-legacy-bucket"
+          # Add attributes to match the real resource.
+          # Run: terraform plan  to see remaining diffs.
+          # Adjust until plan shows: No changes.
+        }
+
+        # moved block: rename without recreating
+        moved {
+          from = aws_s3_bucket.old_name
+          to   = aws_s3_bucket.new_name
+        }
+
+        resource "aws_s3_bucket" "new_name" {
+          bucket = "my-app-data"
+        }
+
+    - title: "Troubleshooting"
+      body: |
+        Even experienced Terraform practitioners encounter errors. Knowing how to
+        diagnose and resolve common issues efficiently is a core production skill.
+
+        Enable debug logging: Set TF_LOG=DEBUG before running a Terraform command
+        to see detailed logs including every provider API call made. Use
+        TF_LOG_PATH=./debug.log to write logs to a file. This is invaluable for
+        diagnosing authentication errors and mysterious provider failures.
+
+        terraform validate: Run before plan to catch syntax errors, type mismatches,
+        and references to undeclared variables or resources. It's faster than plan
+        and requires no provider credentials — safe to run in any environment.
+
+        Reading error messages: Terraform errors usually contain the resource address
+        that failed, the error type, and the underlying API error from the provider.
+        The API error message is often the most informative part — read it carefully.
+
+        Common errors and solutions:
+          BucketAlreadyExists: S3 bucket names are globally unique. Choose a more
+          unique name or add a random suffix.
+
+          DependencyViolation on destroy: Another resource depends on the one being
+          deleted. Identify and destroy the dependent resource first.
+
+          Error acquiring state lock: Either another apply is running, or a previous
+          run crashed and left a stale lock. Verify no other process is active, then
+          use terraform force-unlock <lock-id>.
+
+          "value is not known until apply" error with for_each/count: The collection
+          depends on a computed value. Move the collection definition to a static
+          variable or use a known-at-plan-time identifier.
+
+        Provisioners: The provisioner meta-argument (local-exec, remote-exec, file)
+        runs scripts on resources after creation. Provisioners are a last resort —
+        they make plans non-deterministic and failures are hard to retry cleanly.
+        Always prefer cloud-init, user_data, or configuration management tools.
+      hcl_example: |
+        # Enable debug logging (shell commands):
+        # $ export TF_LOG=DEBUG
+        # $ export TF_LOG_PATH=./terraform-debug.log
+        # $ terraform apply
+        #
+        # Validate without credentials:
+        # $ terraform validate
+        #
+        # Check formatting:
+        # $ terraform fmt --check --recursive
+        #
+        # Force-unlock stale lock (confirm no active apply first):
+        # $ terraform force-unlock <lock-id>
+        #
+        # Provisioner example (last resort only):
+        resource "aws_instance" "bootstrap" {
+          ami           = data.aws_ami.amazon_linux.id
+          instance_type = "t3.micro"
+
+          provisioner "local-exec" {
+            # Runs on the machine executing Terraform, not on the instance
+            command = "echo 'Instance ${self.public_ip} is ready' >> inventory.txt"
+          }
+        }
 
     - title: "Best Practices Summary"
       body: |
-        Naming: Use consistent, descriptive names. Prefix resources by purpose
-        (e.g., web_server, db_primary). Tag everything.
+        After completing this curriculum, here is a consolidated reference of the
+        most important Terraform best practices to carry into your work.
 
-        State: Always use remote state with locking. Never commit tfstate to git.
-        Enable versioning on your state bucket.
+        Version everything: Pin provider versions with ~>, pin module versions with
+        git tags or registry version constraints, set required_version for the
+        Terraform CLI. Commit .terraform.lock.hcl to git. Treat infrastructure
+        changes with the same review rigour as application code.
 
-        Modules: Extract reusable patterns into modules early. Version them
-        semantically. Document inputs, outputs, and examples.
+        Remote state from day one: Never use local state for team projects. Configure
+        an S3 backend with locking and versioning before writing your first resource.
+        Add terraform.tfstate and .terraform/ to .gitignore immediately.
 
-        Variables: Use variable validation blocks. Mark sensitive values.
-        Use tfvars files per environment.
+        Use modules for repeated patterns: If you write the same resource pattern
+        more than twice, extract it to a module. Store shared modules in a versioned
+        repository. Write a README with inputs, outputs, and usage examples.
 
-        Security: Never hardcode secrets. Use environment variables, vault,
-        or provider-native secret managers. Rotate credentials regularly.
+        Prefer for_each over count: Use for_each with maps for collections with
+        distinct identities. Reserve count for simple conditional resource creation
+        (count = var.enabled ? 1 : 0).
 
-        Code review: Treat Terraform like application code. Require PR reviews.
-        Run automated plan + policy checks before merge.
+        Keep configurations small and focused: Aim for configurations that plan and
+        apply in under five minutes. Split large configurations into stacks with
+        clear layer boundaries. Large blast radius is dangerous.
+
+        Protect critical resources: Add lifecycle { prevent_destroy = true } to
+        databases, state buckets, and any resource whose accidental deletion would
+        cause an outage or data loss.
+
+        Automate everything: Plan-on-push, apply-on-merge, policy gates in CI/CD,
+        automated formatting checks. Manual Terraform runs should be the exception.
+
+        Never store secrets in state if avoidable: Use AWS Secrets Manager, SSM
+        Parameter Store, or HashiCorp Vault. Retrieve secrets at apply time via
+        data sources rather than storing them as variables that persist in state.
+
+        Document your modules: Write a README for every module. Good documentation
+        is what separates a module that gets adopted from one that gets rewritten.
       hcl_example: null
 
 quiz:
@@ -126,111 +308,183 @@ quiz:
   questions:
     - id: 1
       type: multiple_choice
-      question: "What language does OPA use for writing policies?"
+      question: "What is the purpose of policy as code in a Terraform workflow?"
       options:
-        - "HCL"
-        - "YAML"
-        - "Rego"
-        - "Python"
-      correct: 2
-      explanation: "Open Policy Agent uses the Rego language for defining policies."
+        - "To replace HCL with a general-purpose programming language"
+        - "To enforce organisational rules on every plan automatically without relying on manual review"
+        - "To generate Terraform configuration from existing infrastructure"
+        - "To compile Terraform code into a machine-readable binary"
+      correct: 1
+      explanation: |
+        Policy as code automates governance by evaluating plans against written rules
+        before any apply runs. This enforces consistency across all teams and
+        environments without manual checklist review.
+
     - id: 2
       type: multiple_choice
-      question: "What is the enforcement level that blocks changes but can be overridden?"
+      question: "What does splitting infrastructure into stacks primarily help with?"
       options:
-        - "advisory"
-        - "soft-mandatory"
-        - "hard-mandatory"
-        - "warning"
-      correct: 1
-      explanation: "soft-mandatory policies block by default but authorized users can override them."
+        - "Reducing the number of providers required"
+        - "Enabling multiple engineers to edit the same .tf files simultaneously"
+        - "Reducing blast radius, improving plan speed, and creating clear ownership boundaries"
+        - "Allowing Terraform to run without a state file"
+      correct: 2
+      explanation: |
+        Stacks reduce blast radius (a mistake in one stack cannot affect others),
+        improve plan and apply speed (fewer resources per configuration), and create
+        clear ownership boundaries between teams.
+
     - id: 3
-      type: true_false
-      question: "A stack executes multiple modules in dependency order."
-      correct: true
-      explanation: "Stacks orchestrate module execution respecting inter-module dependencies."
-    - id: 4
       type: multiple_choice
-      question: "What must you do before running terraform import?"
+      question: "What must you do before running 'terraform import' for an existing resource?"
       options:
-        - "Delete the existing resource"
-        - "Write the resource configuration in HCL first"
-        - "Run terraform destroy"
-        - "Create a new workspace"
+        - "Run terraform destroy first to clear the state"
+        - "Write the resource block in your configuration — import only adds it to state, not to config"
+        - "Run terraform init -upgrade to get the latest provider"
+        - "Manually delete the resource and let Terraform recreate it"
       correct: 1
-      explanation: "You must write the resource config before importing so Terraform knows what to manage."
-    - id: 5
+      explanation: |
+        terraform import adds a resource to state but does not create the
+        configuration block. You must write the resource block first, then run
+        import. After import, run plan to reconcile configuration with actual values.
+
+    - id: 4
       type: true_false
-      question: "After terraform import, you should run terraform plan to verify no changes."
-      correct: true
-      explanation: "A plan with no changes confirms your config matches the imported resource's actual state."
+      question: "Terraform provisioners should be the first choice for configuring software on new instances."
+      correct: false
+      explanation: |
+        Provisioners are a last resort. They make plans non-deterministic, are hard
+        to debug, and don't integrate cleanly with Terraform's lifecycle. Prefer
+        cloud-init, user_data, or configuration management tools like Ansible.
+
+    - id: 5
+      type: multiple_choice
+      question: "Which environment variable enables detailed Terraform debug logging?"
+      options:
+        - "TERRAFORM_DEBUG=true"
+        - "TF_DEBUG=1"
+        - "TF_LOG=DEBUG"
+        - "TERRAFORM_VERBOSE=DEBUG"
+      correct: 2
+      explanation: |
+        Setting TF_LOG=DEBUG (or TF_LOG=TRACE for maximum detail) enables verbose
+        logging. Use TF_LOG_PATH=./debug.log to write to a file instead of stdout.
+
     - id: 6
       type: multiple_choice
-      question: "How do you resolve a stale state lock?"
+      question: "What does the 'moved' block in Terraform allow you to do?"
       options:
-        - "Delete the state file"
-        - "terraform force-unlock <LOCK_ID>"
-        - "terraform init -reconfigure"
-        - "terraform refresh"
+        - "Move a resource to a different AWS region"
+        - "Rename or relocate a resource in your configuration without destroying and recreating it"
+        - "Move a module from one registry to another"
+        - "Transfer state between two different backend types"
       correct: 1
-      explanation: "force-unlock removes a stuck lock. Only use it when you're sure no other process is running."
+      explanation: |
+        The moved block is the declarative equivalent of terraform state mv. It
+        records a rename in your git history and Terraform applies the rename during
+        the next plan/apply without touching real infrastructure.
+
     - id: 7
-      type: true_false
-      question: "It is a best practice to commit terraform.tfstate files to git."
-      correct: false
-      explanation: "State files contain sensitive data and should be stored in encrypted remote backends, never in git."
-    - id: 8
       type: multiple_choice
-      question: "Which is NOT a recommended Terraform best practice?"
+      question: "How does one Terraform stack read outputs from another stack?"
       options:
-        - "Use remote state with locking"
-        - "Hardcode AWS keys in provider blocks for simplicity"
-        - "Tag all resources"
-        - "Require PR reviews for infrastructure changes"
+        - "Using a variable block with source = \"remote\""
+        - "Using the data \"terraform_remote_state\" data source"
+        - "Using a module call pointing to the other stack's directory"
+        - "Stacks cannot share data — each is fully isolated"
       correct: 1
-      explanation: "Never hardcode secrets. Use environment variables, vault, or IAM roles instead."
+      explanation: |
+        The data "terraform_remote_state" source reads the outputs of another
+        configuration's state file. This lets stacks communicate through a clean,
+        read-only interface without giving one stack write access to another's state.
+
+    - id: 8
+      type: true_false
+      question: "'lifecycle { prevent_destroy = true }' prevents 'terraform destroy' from deleting the resource."
+      correct: false
+      explanation: |
+        prevent_destroy = true blocks destruction when it would occur as part of
+        a normal terraform apply workflow. It does NOT block terraform destroy,
+        which can still delete the resource. Use it as a safeguard against
+        accidental deletion during normal apply operations.
 
 lab:
-  title: "Write a Tag Enforcement Policy"
-  description: "Write a simple policy that requires all resources to have specific tags."
+  title: "Write a Tag-Enforcement Configuration with Variable Validation"
+  description: |
+    Simulate policy enforcement using HCL variable validation to require
+    standard tags, then document the equivalent OPA policy rules in comments.
   instructions: |
-    1. Write a Terraform configuration with an aws_instance resource
-    2. Include required tags: Name, Environment, ManagedBy
-    3. Add a comment block describing a policy rule:
-       "All resources must have Name, Environment, and ManagedBy tags"
-    4. Set ManagedBy tag to "terraform"
-    5. Use variables for Name and Environment
+    1. Declare a variable "required_tags" of type map(string) with a validation
+       block that checks all three keys exist — "Environment", "CostCenter",
+       "ManagedBy" — using contains(keys(var.required_tags), "KeyName").
+       Write a clear error_message explaining which tags are required.
+    2. Write a locals block defining:
+       - policy_name = "require-standard-tags"
+       - enforced_tags = ["Environment", "CostCenter", "ManagedBy"]
+    3. Write an aws_s3_bucket resource named "policy_demo" with
+       bucket = "my-policy-demo-bucket" and tags = var.required_tags.
+    4. Above the resource, write a comment block documenting what an
+       equivalent OPA/Sentinel policy would check: which tag keys are required,
+       what enforcement level it would use, and which resource types it applies to.
+    5. Add an output "enforced_tags" returning local.enforced_tags with a description.
   starter_hcl: |
-    terraform {
-      required_providers {
-        aws = {
-          source  = "hashicorp/aws"
-          version = "~> 5.0"
-        }
+    variable "required_tags" {
+      type        = map(string)
+      description = "Standard tags that must be present on all resources"
+
+      validation {
+        condition = (
+          contains(keys(var.required_tags), "Environment") &&
+          contains(keys(var.required_tags), "") &&  # Fill in: CostCenter
+          contains(keys(var.required_tags), "")     # Fill in: ManagedBy
+        )
+        error_message = ""  # Fill in: describe which tags are required
       }
     }
 
-    provider "aws" {
-      region = "us-east-1"
+    locals {
+      policy_name   = "require-standard-tags"
+      enforced_tags = ["Environment", "CostCenter", "ManagedBy"]
     }
 
-    # Policy: All resources must have Name, Environment, ManagedBy tags
-    # TODO: Define variables for name and environment
+    # Policy Documentation
+    # =====================
+    # Policy name:       require-standard-tags
+    # Enforcement level: [Fill in: mandatory / advisory]
+    # Applies to:        [Fill in: which resource types]
+    # Required tags:
+    #   - Environment: [Fill in: allowed values e.g. dev, staging, prod]
+    #   - CostCenter:  [Fill in: format requirement e.g. alphanumeric code]
+    #   - ManagedBy:   [Fill in: expected value e.g. "terraform"]
 
-    # TODO: Create aws_instance with required tags
+    resource "aws_s3_bucket" "policy_demo" {
+      bucket = "my-policy-demo-bucket"
+      tags   = ""  # Reference var.required_tags
+    }
+
+    output "enforced_tags" {
+      value       = ""  # local.enforced_tags
+      description = ""  # Describe what this output represents
+    }
   validation:
     patterns:
-      - pattern: 'tags\s*='
-        message: "Resource must include a tags block"
-      - pattern: 'Name\s*='
-        message: "Must include a Name tag"
-      - pattern: 'Environment\s*='
-        message: "Must include an Environment tag"
-      - pattern: 'ManagedBy\s*=\s*"terraform"'
-        message: "Must include ManagedBy = \"terraform\" tag"
+      - pattern: "contains\\(keys\\(var\\.required_tags\\),\\s*\"CostCenter\"\\)"
+        message: "Add CostCenter to the validation condition"
+      - pattern: "contains\\(keys\\(var\\.required_tags\\),\\s*\"ManagedBy\"\\)"
+        message: "Add ManagedBy to the validation condition"
+      - pattern: "tags\\s*=\\s*var\\.required_tags"
+        message: "Set tags = var.required_tags on the S3 bucket resource"
+      - pattern: "local\\.enforced_tags"
+        message: "Return local.enforced_tags in the output"
     terraform_validate: true
-    ai_review_prompt: "Verify the configuration enforces required tags (Name, Environment, ManagedBy) and uses variables properly."
+    ai_review_prompt: |
+      Review this tag-enforcement Terraform configuration. Check that the variable
+      validation correctly requires all three tag keys, the error message is clear
+      and actionable, the policy comment block is specific (not just placeholders),
+      and the resource correctly uses the validated tags variable. Evaluate whether
+      HCL validation is a reasonable substitute for a real OPA policy and explain
+      the key differences.
   hints:
-    - "Define variable \"name\" and variable \"environment\" with type = string"
-    - "In the tags block, use Name = var.name, Environment = var.environment"
-    - "Set ManagedBy = \"terraform\" as a hardcoded value"
+    - "contains(keys(map), \"KeyName\") returns true if \"KeyName\" exists as a key in the map"
+    - "Chain multiple contains() checks with && — all three must be true for the validation to pass"
+    - "Fill in your policy comment block with real values — enforcement level should be 'mandatory' for required tags"

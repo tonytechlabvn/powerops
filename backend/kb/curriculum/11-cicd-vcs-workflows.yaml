@@ -17,78 +17,235 @@ prerequisites:
 concepts: []
 powerops_features:
   - vcs-workflow
-description: >
-  Automate Terraform workflows with CI/CD pipelines, VCS integration,
-  plan-on-push, apply-on-merge, and approval gates.
+description: |
+  Learn how to integrate Terraform into CI/CD pipelines and version control
+  workflows, enabling automated, auditable, and safe infrastructure delivery.
 
 content:
   sections:
-    - title: "Why CI/CD for Terraform?"
+    - title: "Why CI/CD for Terraform"
       body: |
-        Running Terraform manually on your laptop works for learning, but teams
-        need automation. CI/CD for Terraform provides:
+        Running Terraform manually from a developer's laptop creates a class of
+        problems that grow more serious as your team and infrastructure scale.
+        Who ran the last apply? What version of the provider was used? Was the
+        plan reviewed before apply? Did the credentials used have the right scope?
 
-        Consistency — every change goes through the same pipeline. No more
-        "works on my machine" issues with different Terraform or provider versions.
+        Continuous Integration and Continuous Delivery (CI/CD) pipelines solve
+        these problems by making Terraform execution a structured, automated,
+        auditable process. Every infrastructure change goes through the same
+        repeatable workflow, with the same tooling, the same credentials, and
+        a complete audit trail.
 
-        Audit trail — every plan and apply is logged with who triggered it and what changed.
+        The core benefits of Terraform CI/CD:
 
-        Safety — automated checks (linting, policy evaluation, plan review) catch
-        mistakes before they reach production infrastructure.
+        Consistency: Every plan and apply uses the same Terraform version, the same
+        provider versions (from the lock file), and the same environment variables.
+        No more "works on my machine" discrepancies between developers.
 
-        Speed — merging a pull request can automatically apply infrastructure changes
-        without manual intervention.
+        Auditability: Every change is tied to a git commit, a pull request, and a
+        pipeline run. You can answer "who changed what, when, and why" for any
+        infrastructure change by looking at the git history and the pipeline logs.
+
+        Separation of duties: Developers can propose changes (open a PR, see the
+        plan) without having the credentials to apply them directly. Only the
+        CI/CD system has apply credentials, and it only uses them after a defined
+        approval process.
+
+        Protection against drift: Automated pipelines can run terraform plan on
+        a schedule and alert when drift is detected — real infrastructure has
+        diverged from the configuration without a corresponding code change.
       hcl_example: null
 
     - title: "Plan on Push"
       body: |
-        The most common pattern: when a developer pushes a commit or opens a pull request,
-        the CI pipeline runs terraform plan and posts the output as a PR comment.
+        The most fundamental CI/CD pattern for Terraform is plan-on-push: every
+        time a developer pushes a commit to a branch or opens a pull request,
+        the pipeline automatically runs terraform plan and posts the output as
+        a comment on the PR.
 
-        Reviewers can see exactly what infrastructure changes the code would make
-        before approving the merge. This is similar to running unit tests on code changes.
+        This gives reviewers the actual plan diff — not just the HCL change, but
+        the resulting infrastructure change — as part of the code review. A reviewer
+        can see not just "the instance_type variable changed" but also exactly which
+        EC2 instance will be updated in-place and what the new value will be.
 
-        The plan output shows additions (+), modifications (~), and deletions (-)
-        so the team can evaluate the blast radius of each change.
-      hcl_example: null
+        A minimal plan-on-push pipeline performs these steps:
+          1. Checkout the repository at the PR head commit
+          2. Set up the correct Terraform version (use setup-terraform action or tfenv)
+          3. Run terraform init (downloads providers using the lock file)
+          4. Run terraform validate (fast syntax check, no credentials needed)
+          5. Run terraform fmt --check (fail if formatting is inconsistent)
+          6. Run terraform plan -out=tfplan (saves plan for the apply stage)
+          7. Post the plan output to the PR as a comment
+
+        The saved plan file (tfplan) is critical. It captures the exact changes
+        at the moment the PR was reviewed and approved. When the apply stage runs,
+        it applies this saved plan — not a freshly generated one. This guarantees
+        that what was approved is exactly what gets applied, even if new commits
+        were pushed to main between review and merge.
+
+        Run terraform fmt --check as an early pipeline step. Format failures are
+        fast to detect and enforce a consistent code style across the team without
+        requiring any additional tooling.
+      hcl_example: |
+        # GitHub Actions: plan on pull request (abbreviated)
+        # .github/workflows/terraform-plan.yml
+        #
+        # on:
+        #   pull_request:
+        #     paths: ['infrastructure/**']
+        #
+        # jobs:
+        #   plan:
+        #     runs-on: ubuntu-latest
+        #     steps:
+        #       - uses: actions/checkout@v4
+        #       - uses: hashicorp/setup-terraform@v3
+        #         with:
+        #           terraform_version: "1.7.0"
+        #       - run: terraform init
+        #         working-directory: infrastructure/
+        #       - run: terraform fmt --check
+        #         working-directory: infrastructure/
+        #       - run: terraform validate
+        #         working-directory: infrastructure/
+        #       - run: terraform plan -out=tfplan -no-color
+        #         working-directory: infrastructure/
+        #         env:
+        #           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        #           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - title: "Apply on Merge"
       body: |
-        After the PR is reviewed and approved, merging to the main branch triggers
-        terraform apply. This ensures that only reviewed, approved changes are applied.
+        The complement to plan-on-push is apply-on-merge: when a pull request
+        is merged to the main branch, the pipeline automatically applies the
+        previously saved plan.
 
-        Some teams use auto-apply (apply immediately after merge) while others require
-        an additional manual approval step for production environments.
+        This creates a clean separation of concerns:
+          - The plan stage runs on the PR — visible to reviewers, no changes made
+          - The apply stage runs on merge — changes are applied, state is updated
 
-        The key principle: the main branch always reflects the actual state of
-        your infrastructure. If it is in main, it is applied.
-      hcl_example: null
+        The merge itself acts as the approval gate. Only users with merge permissions
+        can trigger an apply. On GitHub, you can additionally require PR approvals,
+        passing status checks, and branch protection rules before a merge is allowed.
+
+        A robust apply-on-merge workflow:
+          1. Retrieve the saved plan file from the plan stage (via pipeline artifacts)
+          2. Run terraform init
+          3. Run terraform apply tfplan (applies the exact saved plan, no prompt needed)
+          4. Publish the apply output as a pipeline summary
+          5. On failure: alert the team immediately — do not retry automatically
+
+        Post-apply verification is best practice: after apply completes, run
+        terraform plan again and verify the output is "No changes." This confirms
+        the apply was fully successful and state matches configuration. Any remaining
+        diff indicates something unexpected happened during apply.
+
+        Never use terraform apply -auto-approve without a saved plan file in
+        production pipelines. Always save the plan and apply the saved file.
+        This is the only way to guarantee that the reviewed changes are exactly
+        what gets applied.
+      hcl_example: |
+        # GitHub Actions: apply on merge to main (abbreviated)
+        # .github/workflows/terraform-apply.yml
+        #
+        # on:
+        #   push:
+        #     branches: [main]
+        #     paths: ['infrastructure/**']
+        #
+        # jobs:
+        #   apply:
+        #     runs-on: ubuntu-latest
+        #     environment: production  # GitHub Environments: requires manual approval
+        #     steps:
+        #       - uses: actions/checkout@v4
+        #       - uses: hashicorp/setup-terraform@v3
+        #         with:
+        #           terraform_version: "1.7.0"
+        #       - run: terraform init
+        #         working-directory: infrastructure/
+        #       - name: Download saved plan
+        #         uses: actions/download-artifact@v4
+        #         with: { name: tfplan }
+        #       - run: terraform apply -auto-approve tfplan
+        #         working-directory: infrastructure/
+        #         env:
+        #           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        #           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - title: "Approval Workflows"
       body: |
-        For production environments, you often want human approval between plan and apply.
-        This can be implemented as:
+        For production infrastructure, merging a PR is often not sufficient as
+        an approval gate — you may want explicit sign-off from a senior engineer
+        or platform team member before infrastructure changes are applied.
 
-        Manual gates — a team lead must click "Approve" in the CI/CD dashboard.
-        Policy checks — automated OPA/Sentinel policies evaluate the plan and block
-        non-compliant changes.
-        Cost estimation — show estimated cost impact before approval.
+        Several mechanisms exist for adding explicit approval steps:
 
-        Different environments can have different approval requirements: auto-apply
-        for dev, one approval for staging, two approvals for production.
-      hcl_example: null
+        GitHub Environments with required reviewers: In GitHub Actions, "environments"
+        (Settings > Environments) let you require named reviewers to approve a workflow
+        run before it proceeds. The apply job targets the "production" environment,
+        which pauses and notifies reviewers. Only after an approved reviewer clicks
+        "Approve" does the apply continue.
+
+        Terraform Cloud / HCP Terraform: Built-in plan/approve/apply workflow.
+        Every workspace can require a human to review and confirm the plan before
+        apply runs. The UI shows the full plan and a one-click approve button.
+
+        Manual apply workflows: For strict change management requirements, the
+        CI/CD pipeline only runs plan automatically. Apply is triggered manually
+        by a release manager after change control approval is obtained.
+
+        Blast radius segmentation: Consider different approval requirements per stack.
+        Dev might auto-apply on merge. Staging might require one reviewer. Production
+        database changes might require two reviewers plus a change control ticket.
+
+        Whatever approval workflow you choose, the principle is the same: the
+        decision to apply infrastructure changes should be a conscious, documented
+        human choice — not an automatic side effect of code being pushed.
+      hcl_example: |
+        # Conceptual pipeline structure with approval gate:
+        #
+        # PR opened  -> plan runs automatically -> plan posted as PR comment
+        #           -> PR review: code + plan reviewed by peers
+        #           -> PR approved + merged to main
+        #           -> apply pipeline triggers
+        #           -> "production" environment gate pauses for named reviewer
+        #           -> senior engineer reviews plan summary and clicks Approve
+        #           -> terraform apply tfplan runs with saved plan
+        #           -> apply output posted to Slack #infra-changes
+        #           -> post-apply plan confirms: No changes
 
     - title: "PowerOps VCS Integration"
       body: |
-        PowerOps provides built-in VCS integration via its GitHub App. When you
-        connect a repository to a workspace:
+        PowerOps provides a built-in VCS workflow integration that connects your
+        git repository to your PowerOps workspaces, implementing the plan-on-push
+        and apply-on-merge patterns without requiring you to write CI/CD YAML.
 
-        Push events trigger automatic plan runs. PR comments show plan output.
-        Merge to the configured branch triggers apply. Status checks block merge
-        if the plan fails or policies are violated.
+        When VCS integration is enabled on a workspace:
 
-        This eliminates the need to build custom CI/CD pipelines — PowerOps
-        handles the entire workflow from push to apply.
+        On pull request: PowerOps automatically runs terraform plan and posts
+        results as a PR status check and a detailed comment showing the plan output,
+        resource change summary, and policy check results. The PR cannot be merged
+        if the plan fails validation or policies are violated.
+
+        On merge to the configured branch: PowerOps triggers an apply using the
+        saved plan from the PR. If the workspace requires approval, a named approver
+        is notified and must confirm before apply proceeds.
+
+        Key workspace settings for VCS integration:
+          - VCS repository and branch to watch
+          - Working directory (if Terraform code is in a subdirectory)
+          - Trigger patterns (file paths that trigger a run)
+          - Auto-apply vs. approval-required mode
+          - Notification channels (Slack, email, webhook)
+
+        PowerOps also supports speculative plans — running terraform plan against
+        any branch, even ones not set as the apply branch. This lets developers
+        preview infrastructure changes before opening a PR.
+
+        PowerOps maintains a run queue per workspace to prevent concurrent applies
+        that could corrupt state. If a plan is already running when a new push
+        arrives, the new run is queued until the current one completes.
       hcl_example: null
 
 quiz:
@@ -96,95 +253,172 @@ quiz:
   questions:
     - id: 1
       type: multiple_choice
-      question: "What is the primary benefit of CI/CD for Terraform?"
+      question: "What is the primary benefit of running terraform plan automatically on every pull request?"
       options:
-        - "It makes Terraform run faster"
-        - "It ensures consistent, auditable, and reviewed infrastructure changes"
-        - "It eliminates the need for state files"
-        - "It allows you to skip terraform init"
+        - "It prevents developers from opening pull requests with syntax errors"
+        - "It gives reviewers the actual infrastructure diff as part of code review, not just HCL changes"
+        - "It automatically applies the changes if tests pass"
+        - "It eliminates the need for remote state"
       correct: 1
-      explanation: "CI/CD provides consistency, audit trails, and review processes for infrastructure changes."
+      explanation: |
+        Plan-on-PR surfaces the real infrastructure impact of code changes during review.
+        Reviewers see what will be created, changed, or destroyed — not just which
+        lines of HCL changed.
+
     - id: 2
       type: true_false
-      question: "In a plan-on-push workflow, terraform apply runs when a PR is opened."
+      question: "Using 'terraform apply -auto-approve' without a saved plan file is acceptable in production CI/CD."
       correct: false
-      explanation: "Plan-on-push runs terraform plan, not apply. Apply typically runs after merge."
+      explanation: |
+        Without a saved plan, apply generates a fresh plan at apply time that may
+        differ from the reviewed plan. Always save with -out=tfplan and apply the
+        saved file to guarantee reviewed changes are what gets applied.
+
     - id: 3
       type: multiple_choice
-      question: "When does terraform apply typically run in a VCS workflow?"
+      question: "Why is separation of duties important in Terraform CI/CD?"
       options:
-        - "When a branch is created"
-        - "When a PR is opened"
-        - "When the PR is merged to the main branch"
-        - "When a file is saved"
-      correct: 2
-      explanation: "Apply-on-merge ensures only reviewed and approved changes are applied to infrastructure."
+        - "It speeds up plan and apply operations"
+        - "It prevents individual developers from having direct apply credentials, so changes only happen through the approved pipeline"
+        - "It allows multiple developers to apply changes simultaneously"
+        - "It eliminates the need for state locking"
+      correct: 1
+      explanation: |
+        Separation of duties ensures only the CI/CD pipeline — not individual
+        developers' laptops — has production apply credentials. All changes go
+        through the defined approval workflow, creating a complete audit trail.
+
     - id: 4
-      type: true_false
-      question: "Auto-apply is recommended for all environments including production."
-      correct: false
-      explanation: "Production typically requires manual approval gates. Auto-apply is more suitable for dev/staging."
+      type: multiple_choice
+      question: "What step should you perform after a successful terraform apply to verify it completed correctly?"
+      options:
+        - "Run terraform destroy to confirm resources can be deleted"
+        - "Run terraform plan again and verify the output shows 'No changes'"
+        - "Run terraform validate to check for syntax errors"
+        - "Run terraform init -upgrade to refresh providers"
+      correct: 1
+      explanation: |
+        Running terraform plan after apply and verifying "No changes" confirms
+        the apply was fully successful and the real state matches configuration.
+        Any remaining diff indicates a partial or unexpected apply.
+
     - id: 5
       type: multiple_choice
-      question: "What do policy checks evaluate in an approval workflow?"
+      question: "Which CI/CD pattern saves the plan to a file and applies that exact file later?"
       options:
-        - "Code formatting only"
-        - "The terraform plan output against compliance rules"
-        - "Git commit messages"
-        - "Developer permissions"
+        - "Plan on schedule, apply on demand"
+        - "terraform plan -out=tfplan on push, terraform apply tfplan on merge"
+        - "terraform apply -auto-approve on push"
+        - "Plan and apply in the same step with no intermediate file"
       correct: 1
-      explanation: "Policy checks (OPA/Sentinel) evaluate the planned changes against organizational rules."
+      explanation: |
+        Saving with -out=tfplan and applying the saved file ensures the exact plan
+        reviewed during PR is applied — not a new plan that might differ due to
+        infrastructure changes between review and merge.
+
     - id: 6
-      type: multiple_choice
-      question: "What triggers a plan run in PowerOps VCS integration?"
-      options:
-        - "A cron job"
-        - "Manual button click only"
-        - "Push events and pull requests via GitHub webhook"
-        - "Email notification"
-      correct: 2
-      explanation: "PowerOps GitHub App uses webhooks to trigger plan runs on push and PR events."
-    - id: 7
       type: true_false
-      question: "The main branch should always reflect the actual state of deployed infrastructure."
+      question: "Terraform Cloud provides built-in plan/approve/apply workflow without writing CI/CD YAML."
       correct: true
-      explanation: "In a proper GitOps workflow, the main branch is the source of truth for infrastructure state."
+      explanation: |
+        Terraform Cloud and HCP Terraform include built-in VCS integration with
+        automatic plan-on-push and configurable approval gates. No external CI/CD
+        pipeline configuration is needed.
+
+    - id: 7
+      type: multiple_choice
+      question: "What is a 'speculative plan' in PowerOps VCS-integrated workflows?"
+      options:
+        - "A plan that runs on a schedule to detect drift"
+        - "A plan run against any branch to preview changes before opening a PR"
+        - "A plan that includes cost estimation"
+        - "A plan that skips provider initialisation for speed"
+      correct: 1
+      explanation: |
+        A speculative plan runs terraform plan against any branch (not just the
+        apply branch), letting developers preview infrastructure changes before
+        opening a pull request. It never triggers an apply.
 
 lab:
-  title: "Design a VCS Workflow Configuration"
-  description: "Write a conceptual Terraform configuration for VCS-driven workflows."
+  title: "Configure a VCS Workflow with Backend and Environment Documentation"
+  description: |
+    Write a complete Terraform configuration that combines an S3 backend,
+    environment variable, and structured comments documenting the CI/CD
+    workflow this configuration participates in.
   instructions: |
-    1. Write a terraform block with backend configuration for remote state (S3)
-    2. Add a comment block describing your VCS workflow:
-       - What triggers a plan? (push/PR)
-       - What triggers an apply? (merge to main)
-       - What approval gates exist?
-    3. Define a variable for the environment name
-    4. Use the environment variable in a resource tag
+    1. Write a terraform{} block with:
+       - required_version >= 1.5.0
+       - A backend "s3" {} block pointing to bucket "my-org-tf-state",
+         key "app/prod/terraform.tfstate", region "us-east-1", encrypt = true
+    2. Declare a variable "environment" with type string and default "prod".
+    3. Write a comment block above the resource documenting the CI/CD workflow:
+       - What event triggers a plan run (push/PR)
+       - What event triggers an apply (merge to main)
+       - What approval is required before apply
+    4. Write an aws_s3_bucket resource named "app" using string interpolation
+       with var.environment in the bucket name, and tags including Environment
+       and ManagedBy = "terraform".
+    5. Add an output "bucket_name" returning the bucket name.
   starter_hcl: |
-    # VCS Workflow Configuration
-    # TODO: Add terraform block with S3 backend
+    terraform {
+      required_version = ">= 1.5.0"
 
-    # TODO: Document your VCS workflow in comments
-    # Trigger: ...
-    # Plan: ...
-    # Apply: ...
-    # Approval: ...
+      backend "s3" {
+        bucket  = ""          # Fill in: my-org-tf-state
+        key     = ""          # Fill in: app/prod/terraform.tfstate
+        region  = "us-east-1"
+        encrypt = true
+      }
 
-    # TODO: Define environment variable
+      required_providers {
+        aws = {
+          source  = "hashicorp/aws"
+          version = "~> 5.0"
+        }
+      }
+    }
 
-    # TODO: Create a resource using the environment variable
+    variable "environment" {
+      type    = string
+      default = ""  # Fill in: prod
+    }
+
+    # CI/CD Workflow Documentation
+    # Plan trigger:  [Fill in: describe what triggers a plan]
+    # Apply trigger: [Fill in: describe what triggers apply]
+    # Approval gate: [Fill in: describe the approval requirement]
+
+    resource "aws_s3_bucket" "app" {
+      bucket = ""  # Use string interpolation: "my-org-app-${var.environment}"
+
+      tags = {
+        Environment = ""  # Reference the variable
+        ManagedBy   = "terraform"
+      }
+    }
+
+    output "bucket_name" {
+      value       = ""  # aws_s3_bucket.app.bucket
+      description = "Name of the application S3 bucket"
+    }
   validation:
     patterns:
-      - pattern: 'backend\s+"s3"'
-        message: "Must configure S3 backend for remote state"
-      - pattern: 'variable\s+"environment"'
-        message: "Must define an environment variable"
-      - pattern: '#.*[Tt]rigger|#.*[Pp]lan|#.*[Aa]pply'
-        message: "Must document VCS workflow in comments"
-    terraform_validate: false
-    ai_review_prompt: "Check that the configuration describes a VCS workflow with backend config and environment variable usage."
+      - pattern: "backend\\s+\"s3\""
+        message: "Configure an S3 backend in the terraform block"
+      - pattern: "encrypt\\s*=\\s*true"
+        message: "Set encrypt = true in the S3 backend configuration"
+      - pattern: "variable\\s+\"environment\""
+        message: "Declare an input variable named environment"
+      - pattern: "#.*[Tt]rigger|#.*[Pp]lan.*trigger|#.*[Aa]pply.*trigger"
+        message: "Document the CI/CD workflow triggers in comments above the resource"
+    terraform_validate: true
+    ai_review_prompt: |
+      Review this CI/CD-aware Terraform configuration. Check that the S3 backend is
+      fully configured with encryption, the environment variable is used correctly
+      in the resource, the CI/CD workflow comment block is specific and realistic
+      (not just placeholders), and the output is properly declared. Comment on
+      whether the configuration follows the plan-on-push/apply-on-merge pattern.
   hints:
-    - "Use backend \"s3\" { bucket = \"...\" key = \"...\" region = \"...\" } in the terraform block"
-    - "Add comments explaining: push triggers plan, merge triggers apply"
-    - "Define variable \"environment\" { type = string default = \"dev\" }"
+    - "S3 backend key uses forward slashes as a path separator: \"app/prod/terraform.tfstate\""
+    - "Your CI/CD workflow comments should describe: push to PR branch triggers plan, merge to main triggers apply, senior engineer approval required"
+    - "The bucket name uses string interpolation: \"my-org-app-${var.environment}\""
