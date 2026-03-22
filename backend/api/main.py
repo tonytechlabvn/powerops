@@ -259,6 +259,10 @@ def create_app() -> FastAPI:
         body = await request.body()
         headers = dict(request.headers)
         headers.pop("host", None)
+        # Forward proxy headers so Keycloak generates correct public URLs
+        headers["X-Forwarded-Host"] = "powerops.tonytechlab.com"
+        headers["X-Forwarded-Proto"] = "https"
+        headers["X-Forwarded-Port"] = "443"
         try:
             resp = await _keycloak_client.request(
                 method=request.method, url=url,
