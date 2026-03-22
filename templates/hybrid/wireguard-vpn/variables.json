@@ -1,0 +1,225 @@
+{
+  "variables": [
+    {
+      "name": "use_elastic_ip",
+      "type": "bool",
+      "description": "Allocate an Elastic IP for stable WireGuard endpoint. Recommended true to prevent IP change on EC2 stop/start.",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "aws_region",
+      "type": "string",
+      "description": "AWS region to deploy EC2 WireGuard server into.",
+      "default": "us-east-1",
+      "required": false
+    },
+    {
+      "name": "ami_id",
+      "type": "string",
+      "description": "Ubuntu 22.04 AMI ID for EC2 instance. Must match the target region.",
+      "default": "ami-0c02fb55956c7d316",
+      "required": false
+    },
+    {
+      "name": "instance_type",
+      "type": "string",
+      "description": "EC2 instance type (t3.micro sufficient for WireGuard).",
+      "default": "t3.micro",
+      "required": false
+    },
+    {
+      "name": "instance_name",
+      "type": "string",
+      "description": "Name tag for the EC2 WireGuard server instance.",
+      "default": "wireguard-server",
+      "required": false
+    },
+    {
+      "name": "key_name",
+      "type": "string",
+      "description": "Name of existing EC2 key pair for SSH. Leave empty if using auto_key_pair.",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "auto_key_pair",
+      "type": "bool",
+      "description": "Auto-generate SSH key pair for EC2 access.",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "allowed_ssh_cidr",
+      "type": "string",
+      "description": "CIDR block allowed SSH access to EC2. Restrict to your IP for security.",
+      "default": "0.0.0.0/0",
+      "required": false
+    },
+    {
+      "name": "root_volume_size_gb",
+      "type": "number",
+      "description": "EC2 root EBS volume size in GB.",
+      "default": 20,
+      "required": false
+    },
+    {
+      "name": "proxmox_api_url",
+      "type": "string",
+      "description": "Proxmox API endpoint URL (e.g. https://proxmox.example.com:8006/api2/json).",
+      "required": true
+    },
+    {
+      "name": "proxmox_tls_insecure",
+      "type": "bool",
+      "description": "Skip TLS certificate verification for Proxmox API. Set false in production.",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "proxmox_node",
+      "type": "string",
+      "description": "Proxmox node name where the VM will be created.",
+      "default": "pve",
+      "required": false
+    },
+    {
+      "name": "vm_id",
+      "type": "number",
+      "description": "Unique VM ID in Proxmox (100-999999).",
+      "default": 200,
+      "required": false
+    },
+    {
+      "name": "vm_name",
+      "type": "string",
+      "description": "Proxmox VM hostname and display name.",
+      "default": "wireguard-client",
+      "required": false
+    },
+    {
+      "name": "template_name",
+      "type": "string",
+      "description": "Proxmox VM template to clone (Ubuntu cloud-init image).",
+      "default": "ubuntu-22.04-cloudinit",
+      "required": false
+    },
+    {
+      "name": "cores",
+      "type": "number",
+      "description": "Number of vCPU cores for Proxmox VM.",
+      "default": 2,
+      "required": false
+    },
+    {
+      "name": "memory_mb",
+      "type": "number",
+      "description": "RAM allocation in MB for Proxmox VM.",
+      "default": 2048,
+      "required": false
+    },
+    {
+      "name": "disk_size_gb",
+      "type": "number",
+      "description": "Primary disk size in GB for Proxmox VM.",
+      "default": 20,
+      "required": false
+    },
+    {
+      "name": "storage_pool",
+      "type": "string",
+      "description": "Proxmox storage pool for VM disk.",
+      "default": "local-lvm",
+      "required": false
+    },
+    {
+      "name": "proxmox_vm_ip",
+      "type": "string",
+      "description": "Static IP with CIDR for Proxmox VM (e.g. 192.168.1.100/24). Use 'dhcp' for DHCP.",
+      "default": "dhcp",
+      "required": false
+    },
+    {
+      "name": "proxmox_vm_gateway",
+      "type": "string",
+      "description": "Default gateway for Proxmox VM. Required when proxmox_vm_ip is not 'dhcp'.",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "proxmox_ssh_user",
+      "type": "string",
+      "description": "SSH username for Proxmox VM provisioner connection.",
+      "default": "ubuntu",
+      "required": false
+    },
+    {
+      "name": "wg_server_ip",
+      "type": "string",
+      "description": "WireGuard tunnel IP for EC2 server.",
+      "default": "10.100.0.1",
+      "required": false
+    },
+    {
+      "name": "wg_client_ip",
+      "type": "string",
+      "description": "WireGuard tunnel IP for Proxmox client.",
+      "default": "10.100.0.2",
+      "required": false
+    },
+    {
+      "name": "wg_listen_port",
+      "type": "number",
+      "description": "WireGuard UDP listen port.",
+      "default": 51820,
+      "required": false
+    },
+    {
+      "name": "wg_server_private_key",
+      "type": "string",
+      "description": "WireGuard server private key (base64). Generate with: wg genkey",
+      "required": true,
+      "sensitive": true
+    },
+    {
+      "name": "wg_server_public_key",
+      "type": "string",
+      "description": "WireGuard server public key (base64). Generate with: echo <private> | wg pubkey",
+      "required": true
+    },
+    {
+      "name": "wg_client_private_key",
+      "type": "string",
+      "description": "WireGuard client private key (base64). Generate with: wg genkey",
+      "required": true,
+      "sensitive": true
+    },
+    {
+      "name": "wg_client_public_key",
+      "type": "string",
+      "description": "WireGuard client public key (base64). Generate with: echo <private> | wg pubkey",
+      "required": true
+    },
+    {
+      "name": "wg_extra_allowed_ips",
+      "type": "string",
+      "description": "Extra AllowedIPs for Proxmox WireGuard peer (e.g. '10.0.0.0/16' to route AWS VPC). No leading comma needed.",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "ec2_ssh_private_key_path",
+      "type": "string",
+      "description": "Path to SSH private key for EC2 provisioner. Only used when auto_key_pair is false.",
+      "default": "~/.ssh/id_rsa",
+      "required": false
+    },
+    {
+      "name": "environment",
+      "type": "string",
+      "description": "Deployment environment tag (dev, staging, prod).",
+      "default": "dev",
+      "required": false
+    }
+  ]
+}

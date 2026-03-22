@@ -1,0 +1,57 @@
+name: hybrid-wireguard-vpn
+display_name: "Hybrid WireGuard VPN (Proxmox + EC2)"
+description: "Point-to-point WireGuard VPN tunnel between an on-premise Proxmox VM and an AWS EC2 instance. EC2 acts as VPN server; Proxmox VM as client with persistent keepalive."
+category: hybrid-cloud
+complexity: intermediate
+providers: [aws, proxmox]
+tags: [hybrid, wireguard, vpn, ec2, proxmox, networking, site-to-site]
+
+variables:
+  - name: aws_region
+    type: string
+    default: "us-east-1"
+    description: "AWS region for the EC2 WireGuard server"
+  - name: instance_type
+    type: string
+    default: "t3.micro"
+    description: "EC2 instance type (t3.micro sufficient for WireGuard)"
+  - name: proxmox_api_url
+    type: string
+    description: "Proxmox API endpoint URL"
+  - name: proxmox_node
+    type: string
+    default: "pve"
+    description: "Proxmox node for VM placement"
+  - name: wg_server_ip
+    type: string
+    default: "10.100.0.1"
+    description: "WireGuard tunnel IP for EC2 server"
+  - name: wg_client_ip
+    type: string
+    default: "10.100.0.2"
+    description: "WireGuard tunnel IP for Proxmox client"
+  - name: environment
+    type: string
+    default: "dev"
+    description: "Deployment environment tag"
+
+modules:
+  - name: wireguard-vpn
+    provider: hybrid
+    depends_on: []
+    description: "EC2 WireGuard server + Proxmox WireGuard client with auto key generation and cloud-init provisioning."
+
+roles:
+  - workspace-admin
+  - developer
+
+outputs:
+  - name: ec2_public_ip
+    module: wireguard-vpn
+    description: "EC2 WireGuard server public IP"
+  - name: proxmox_vm_ip
+    module: wireguard-vpn
+    description: "Proxmox VM LAN IP address"
+  - name: wireguard_status_commands
+    module: wireguard-vpn
+    description: "Commands to verify WireGuard VPN connectivity"
