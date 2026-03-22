@@ -28,6 +28,7 @@ dependencies = [
     "cryptography>=44.0.0",
     "pyjwt[crypto]>=2.10.0",
     "bcrypt>=4.2.0",
+    "python-multipart>=0.0.18",
 ]
 
 [project.scripts]
