@@ -60,7 +60,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/callback" element={<AuthCallbackPage />} />
           <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
       </AuthProvider>

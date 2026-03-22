@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Store verifier for code exchange
       sessionStorage.setItem('pkce_verifier', verifier)
 
-      const redirectUri = `${window.location.origin}/auth/callback`
+      const redirectUri = `${window.location.origin}/callback`
       const authUrl = `${config.url}/realms/${config.realm}/protocol/openid-connect/auth`
         + `?client_id=${config.clientId}`
         + `&response_type=code`
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Exchange auth code for tokens
   const handleCallback = useCallback(async (code: string) => {
-    const redirectUri = `${window.location.origin}/auth/callback`
+    const redirectUri = `${window.location.origin}/callback`
     const codeVerifier = sessionStorage.getItem('pkce_verifier')
     sessionStorage.removeItem('pkce_verifier')
     try {
@@ -151,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const params = new URLSearchParams(window.location.search)
       const code = params.get('code')
 
-      if (code && window.location.pathname === '/auth/callback') {
+      if (code && window.location.pathname === '/callback') {
         await handleCallback(code)
         setIsLoading(false)
         return
