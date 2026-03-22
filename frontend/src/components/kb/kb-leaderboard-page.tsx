@@ -13,7 +13,7 @@ export function KBLeaderboardPage() {
   const [scope, setScope] = useState<'team' | 'org'>('team')
   const { data, isLoading } = useKBLeaderboard(scope)
   const { user } = useAuth()
-  const currentUserId = user?.sub || ''
+  const currentUserId = user?.id || ''
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
