@@ -4,6 +4,16 @@
 
 ### Added
 
+#### Hybrid WireGuard VPN Template (2026-03-22)
+- **New template: `hybrid/wireguard-vpn`** — Proxmox VM + AWS EC2 connected via WireGuard VPN
+  - EC2 as WireGuard server with Elastic IP for stable endpoint
+  - Proxmox VM as WireGuard client with PersistentKeepalive
+  - WireGuard keys as input variables (no regeneration drift)
+  - Config delivered via SSH provisioner (private keys not in user_data)
+  - Dynamic network interface detection for iptables rules
+  - Providers: aws ~>5.0, proxmox/telmate ~>2.9, tls ~>4.0
+- **New project config: `hybrid-wireguard-vpn.yaml`**
+
 #### Knowledge Base Module (2026-03-22)
 - **Interactive Terraform Curriculum** — 12-chapter learning path with hands-on labs and quizzes
   - Chapter 1: Infrastructure as Code (IaC) Intro
