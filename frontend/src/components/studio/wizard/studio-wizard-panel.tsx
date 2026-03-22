@@ -15,7 +15,7 @@ import {
   CONNECTIVITY_FIELDS,
   MONITORING_FIELDS,
 } from './wizard-step-fields'
-import type { StudioTemplate, StudioStatus } from '../../../types/studio-types'
+import type { StudioStatus } from '../../../types/studio-types'
 
 // Step ID → label mapping
 const STEP_LABELS: Record<string, string> = {
