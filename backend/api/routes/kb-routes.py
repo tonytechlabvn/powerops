@@ -117,7 +117,7 @@ async def list_curriculum(request: Request):
     kb = _kb()
     async with get_session() as session:
         data = await kb.ProgressTracker.get_curriculum_with_progress(
-            session, user["sub"], loader,
+            session, user["user_id"], loader,
         )
     S = _schemas()
     return S.UserProgress(**data)
@@ -154,7 +154,7 @@ async def start_chapter(slug: str, request: Request):
         raise HTTPException(404, f"Chapter '{slug}' not found")
     kb = _kb()
     async with get_session() as session:
-        await kb.ProgressTracker.start_chapter(session, user["sub"], slug)
+        await kb.ProgressTracker.start_chapter(session, user["user_id"], slug)
         await session.commit()
     return {"status": "ok", "chapter": slug}
 
@@ -194,7 +194,7 @@ async def submit_quiz(slug: str, request: Request):
     kb = _kb()
     async with get_session() as session:
         await kb.ProgressTracker.update_quiz(
-            session, user["sub"], slug, result.score, result.passed,
+            session, user["user_id"], slug, result.score, result.passed,
         )
         await session.commit()
 
@@ -262,7 +262,7 @@ async def validate_lab(slug: str, request: Request):
         kb = _kb()
         async with get_session() as session:
             await kb.ProgressTracker.update_lab(
-                session, user["sub"], slug, body.hcl_code, body.level, True,
+                session, user["user_id"], slug, body.hcl_code, body.level, True,
             )
             await session.commit()
 
@@ -289,7 +289,7 @@ async def complete_chapter(slug: str, request: Request):
     kb = _kb()
     async with get_session() as session:
         progress = await kb.ProgressTracker.get_chapter_progress(
-            session, user["sub"], slug,
+            session, user["user_id"], slug,
         )
         if not progress:
             raise HTTPException(400, "Chapter not started")
@@ -297,7 +297,7 @@ async def complete_chapter(slug: str, request: Request):
             raise HTTPException(400, "Quiz not passed (need >= 70%)")
         if not progress.lab_completed:
             raise HTTPException(400, "Lab not completed")
-        await kb.ProgressTracker.complete_chapter(session, user["sub"], slug)
+        await kb.ProgressTracker.complete_chapter(session, user["user_id"], slug)
         await session.commit()
     return {"status": "ok", "chapter": slug, "completed": True}
 
@@ -310,7 +310,7 @@ async def get_progress(request: Request):
     kb = _kb()
     async with get_session() as session:
         data = await kb.ProgressTracker.get_curriculum_with_progress(
-            session, user["sub"], loader,
+            session, user["user_id"], loader,
         )
     S = _schemas()
     return S.UserProgress(**data)
@@ -345,7 +345,7 @@ async def get_leaderboard(request: Request, scope: str = "team"):
     S = _schemas()
     async with get_session() as session:
         entries = await lb.get_leaderboard(session, scope, team_id)
-        rank = await lb.get_user_rank(session, user["sub"], scope, team_id)
+        rank = await lb.get_user_rank(session, user["user_id"], scope, team_id)
 
     return S.LeaderboardResponse(
         scope=scope,

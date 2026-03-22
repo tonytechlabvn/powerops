@@ -48,7 +48,7 @@ class Leaderboard:
         query = (
             select(
                 User.id,
-                User.display_name,
+                User.name,
                 sa_func.count(case(
                     (KBUserProgress.status == "completed", literal_column("1")),
                 )).label("chapters_completed"),
@@ -62,7 +62,7 @@ class Leaderboard:
                 )).label("labs_completed"),
             )
             .outerjoin(KBUserProgress, User.id == KBUserProgress.user_id)
-            .group_by(User.id, User.display_name)
+            .group_by(User.id, User.name)
         )
 
         # Scope filter
@@ -91,7 +91,7 @@ class Leaderboard:
             badges = await Leaderboard._get_user_badges(session, row.id)
             entries.append({
                 "user_id": row.id,
-                "display_name": row.display_name or "Unknown",
+                "display_name": row.name or "Unknown",
                 "chapters_completed": completed,
                 "avg_quiz_score": round(avg_score, 1),
                 "labs_completed": labs,
