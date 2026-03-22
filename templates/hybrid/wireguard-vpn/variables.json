@@ -1,9 +1,9 @@
 {
   "variables": [
     {
-      "name": "use_elastic_ip",
+      "name": "auto_mode",
       "type": "bool",
-      "description": "Allocate an Elastic IP for stable WireGuard endpoint. Recommended true to prevent IP change on EC2 stop/start.",
+      "description": "Auto Mode: auto-generate all WireGuard keys. Manual Mode: provide your own keys.",
       "default": true,
       "required": false
     },
@@ -33,20 +33,6 @@
       "type": "string",
       "description": "Name tag for the EC2 WireGuard server instance.",
       "default": "wireguard-server",
-      "required": false
-    },
-    {
-      "name": "key_name",
-      "type": "string",
-      "description": "Name of existing EC2 key pair for SSH. Leave empty if using auto_key_pair.",
-      "default": "",
-      "required": false
-    },
-    {
-      "name": "auto_key_pair",
-      "type": "bool",
-      "description": "Auto-generate SSH key pair for EC2 access.",
-      "default": true,
       "required": false
     },
     {
@@ -177,41 +163,38 @@
     {
       "name": "wg_server_private_key",
       "type": "string",
-      "description": "WireGuard server private key (base64). Generate with: wg genkey",
-      "required": true,
+      "description": "[Manual mode only] WireGuard server private key. Generate with: wg genkey",
+      "default": "",
+      "required": false,
       "sensitive": true
     },
     {
       "name": "wg_server_public_key",
       "type": "string",
-      "description": "WireGuard server public key (base64). Generate with: echo <private> | wg pubkey",
-      "required": true
+      "description": "[Manual mode only] WireGuard server public key. Generate with: echo <private> | wg pubkey",
+      "default": "",
+      "required": false
     },
     {
       "name": "wg_client_private_key",
       "type": "string",
-      "description": "WireGuard client private key (base64). Generate with: wg genkey",
-      "required": true,
+      "description": "[Manual mode only] WireGuard client private key. Generate with: wg genkey",
+      "default": "",
+      "required": false,
       "sensitive": true
     },
     {
       "name": "wg_client_public_key",
       "type": "string",
-      "description": "WireGuard client public key (base64). Generate with: echo <private> | wg pubkey",
-      "required": true
+      "description": "[Manual mode only] WireGuard client public key. Generate with: echo <private> | wg pubkey",
+      "default": "",
+      "required": false
     },
     {
       "name": "wg_extra_allowed_ips",
       "type": "string",
       "description": "Extra AllowedIPs for Proxmox WireGuard peer (e.g. '10.0.0.0/16' to route AWS VPC). No leading comma needed.",
       "default": "",
-      "required": false
-    },
-    {
-      "name": "ec2_ssh_private_key_path",
-      "type": "string",
-      "description": "Path to SSH private key for EC2 provisioner. Only used when auto_key_pair is false.",
-      "default": "~/.ssh/id_rsa",
       "required": false
     },
     {

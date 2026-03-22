@@ -149,11 +149,63 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
   const isAutoMode = template.tags.includes('auto-mode')
   const isAwsSide = template.name.includes('aws-side')
   const isProxmoxSide = template.name.includes('proxmox-side')
+  const isCombinedVpn = template.name === 'hybrid/wireguard-vpn'
+  const hasAutoModeVar = template.variables.some(v => v.name === 'auto_mode')
+  const currentAutoMode = values['auto_mode'] === 'true'
+  // Manual-only key fields hidden when auto_mode is on
+  const manualKeyFields = ['wg_server_private_key', 'wg_server_public_key', 'wg_client_private_key', 'wg_client_public_key']
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Auto Mode banner */}
-      {isAutoMode && (
+      {/* Mode selector for combined VPN template */}
+      {hasAutoModeVar && (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setValue('auto_mode', 'true')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium border transition-colors ${
+                currentAutoMode
+                  ? 'bg-green-600/20 border-green-500/50 text-green-300'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600'
+              }`}
+            >
+              <Zap size={14} />
+              Auto Mode
+            </button>
+            <button
+              type="button"
+              onClick={() => setValue('auto_mode', 'false')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium border transition-colors ${
+                !currentAutoMode
+                  ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600'
+              }`}
+            >
+              Manual Mode
+            </button>
+          </div>
+          {currentAutoMode ? (
+            <div className="bg-green-600/10 border border-green-500/30 rounded-md p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Zap size={14} className="text-green-400" />
+                <span className="text-sm font-semibold text-green-300">Auto Mode</span>
+              </div>
+              <p className="text-xs text-zinc-300">All WireGuard keys are <strong>auto-generated</strong> on deploy. No manual key generation needed. Requires <code className="bg-zinc-800 px-1 rounded">wg</code> + <code className="bg-zinc-800 px-1 rounded">jq</code> on the Terraform host.</p>
+            </div>
+          ) : (
+            <div className="bg-blue-600/10 border border-blue-500/30 rounded-md p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-semibold text-blue-300">Manual Mode</span>
+              </div>
+              <p className="text-xs text-zinc-300">Provide your own WireGuard keys below. Generate with: <code className="bg-zinc-800 px-1 rounded">wg genkey | tee privkey | wg pubkey {'>'} pubkey</code></p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Auto Mode banner for split templates */}
+      {isAutoMode && !hasAutoModeVar && (
         <div className="bg-green-600/10 border border-green-500/30 rounded-md p-4 space-y-2">
           <div className="flex items-center gap-2">
             <Zap size={16} className="text-green-400" />
@@ -197,7 +249,15 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
       {template.variables.length === 0 ? (
         <p className="text-sm text-zinc-500">This template has no variables — ready to deploy!</p>
       ) : (
-        template.variables.map(variable => (
+        template.variables
+          .filter(variable => {
+            // Hide auto_mode variable (handled by mode selector buttons above)
+            if (variable.name === 'auto_mode') return false
+            // Hide manual key fields when auto_mode is on
+            if (hasAutoModeVar && currentAutoMode && manualKeyFields.includes(variable.name)) return false
+            return true
+          })
+          .map(variable => (
           <VariableField
             key={variable.name}
             variable={variable}
