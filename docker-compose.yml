@@ -27,6 +27,63 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: powerops-keycloak-db
+    restart: always
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+    volumes:
+      - powerops-keycloak-pgdata:/var/lib/postgresql/data
+    networks:
+      - tony-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: powerops-keycloak
+    command: start-dev --import-realm
+    restart: always
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    networks:
+      - tony-net
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   opa:
     image: openpolicyagent/opa:0.70.0
     container_name: powerops-opa
@@ -54,6 +111,8 @@ services:
         condition: service_healthy
       opa:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
     environment:
       - TERRABOT_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - TERRABOT_DB_URL=postgresql+asyncpg://powerops:${POSTGRES_PASSWORD:-powerops}@postgres:5432/powerops
@@ -64,6 +123,10 @@ services:
       - TERRABOT_GITHUB_APP_ID=${GITHUB_APP_ID:-0}
       - TERRABOT_GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
       - TERRABOT_OPA_URL=http://opa:8181
+      - TERRABOT_KEYCLOAK_URL=http://keycloak:8080
+      - TERRABOT_KEYCLOAK_REALM=powerops
+      - TERRABOT_KEYCLOAK_CLIENT_ID=powerops-api
+      - TERRABOT_KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-powerops-api-secret}
     volumes:
       - powerops-data:/app/data
       - powerops-workspaces:/app/workspaces
@@ -82,5 +145,6 @@ services:
 
 volumes:
   powerops-pgdata:
+  powerops-keycloak-pgdata:
   powerops-data:
   powerops-workspaces:

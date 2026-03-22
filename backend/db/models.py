@@ -241,12 +241,12 @@ class Organization(Base):
 
 
 class User(Base):
-    """User with email/password auth. Replaces old API-key-only User model."""
+    """User authenticated via Keycloak OIDC. Auto-provisioned on first login."""
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    keycloak_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     email: Mapped[str] = mapped_column(String(256), nullable=False, unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     org_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("organizations.id"), nullable=True, default=None,

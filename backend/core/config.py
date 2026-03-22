@@ -43,14 +43,20 @@ class Settings(BaseSettings):
     state_lock_timeout_seconds: int = 600
 
     # --- Phase 2: Auth & RBAC ---
-    # JWT secret for signing tokens. REQUIRED in production.
+    # Legacy JWT secret (kept for API token signing; Keycloak uses RS256 JWKS)
     jwt_secret: str = ""
-    # JWT access token TTL in minutes
+    # JWT access token TTL in minutes (Keycloak controls actual token lifespan)
     jwt_access_ttl_minutes: int = 15
     # JWT refresh token TTL in days
     jwt_refresh_ttl_days: int = 7
-    # bcrypt hashing cost factor
-    bcrypt_rounds: int = 12
+
+    # --- Keycloak OIDC ---
+    keycloak_url: str = "http://keycloak:8080"
+    keycloak_realm: str = "powerops"
+    keycloak_client_id: str = "powerops-api"
+    keycloak_client_secret: str = ""
+    # Public-facing Keycloak URL (for browser redirects; defaults to keycloak_url)
+    keycloak_public_url: str = ""
 
     # --- Phase 3: VCS / GitHub App ---
     # GitHub App ID (set after manifest flow or manual creation)

@@ -1,82 +1,17 @@
-"""Auth service: password hashing, JWT lifecycle, and API token management.
+"""Auth service: API token management.
 
-Centralises all cryptographic operations so routes stay thin.
+Password auth removed — Keycloak handles all user authentication.
+This module retains API token (X-API-Key) CRUD for CLI/automation access.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
 import secrets
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional
 
-import bcrypt
-import jwt
-
 logger = logging.getLogger(__name__)
-
-
-def _settings():
-    from backend.core.config import get_settings
-    return get_settings()
-
-
-# ---------------------------------------------------------------------------
-# Password helpers
-# ---------------------------------------------------------------------------
-
-
-def hash_password(password: str) -> str:
-    """Return bcrypt hash of password using configured rounds."""
-    rounds = _settings().bcrypt_rounds
-    salt = bcrypt.gensalt(rounds=rounds)
-    return bcrypt.hashpw(password.encode(), salt).decode()
-
-
-def verify_password(password: str, hashed: str) -> bool:
-    """Return True if password matches the stored bcrypt hash."""
-    try:
-        return bcrypt.checkpw(password.encode(), hashed.encode())
-    except Exception:
-        return False
-
-
-# ---------------------------------------------------------------------------
-# JWT helpers
-# ---------------------------------------------------------------------------
-
-
-def create_access_token(user_id: str, org_id: str) -> str:
-    """Issue a short-lived JWT access token."""
-    s = _settings()
-    now = datetime.now(timezone.utc)
-    payload = {
-        "sub": user_id,
-        "org": org_id,
-        "type": "access",
-        "iat": now,
-        "exp": now + timedelta(minutes=s.jwt_access_ttl_minutes),
-    }
-    return jwt.encode(payload, s.jwt_secret, algorithm="HS256")
-
-
-def create_refresh_token(user_id: str) -> str:
-    """Issue a long-lived JWT refresh token (no org claim)."""
-    s = _settings()
-    now = datetime.now(timezone.utc)
-    payload = {
-        "sub": user_id,
-        "type": "refresh",
-        "iat": now,
-        "exp": now + timedelta(days=s.jwt_refresh_ttl_days),
-    }
-    return jwt.encode(payload, s.jwt_secret, algorithm="HS256")
-
-
-def verify_token(token: str) -> dict:
-    """Decode and return JWT claims. Raises jwt.PyJWTError on invalid/expired."""
-    s = _settings()
-    return jwt.decode(token, s.jwt_secret, algorithms=["HS256"])
 
 
 # ---------------------------------------------------------------------------

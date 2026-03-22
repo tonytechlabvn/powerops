@@ -35,19 +35,7 @@ def _load_schema(rel: str, alias: str):
     return mod
 
 
-def _load_core(rel: str, alias: str):
-    full = f"backend.core.{alias}"
-    if full in _sys.modules:
-        return _sys.modules[full]
-    spec = _ilu.spec_from_file_location(full, _P(__file__).resolve().parent.parent.parent / "core" / rel)
-    mod = _ilu.module_from_spec(spec)  # type: ignore[arg-type]
-    _sys.modules[full] = mod
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
-
-
 _schemas  = _load_schema("schemas/auth-schemas.py", "schemas.auth_schemas")
-_auth_svc = _load_core("auth-service.py", "auth_service")
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -58,8 +46,8 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 class CreateUserRequest(BaseModel):
     email: EmailStr
-    password: str
     name: str
+    keycloak_id: str
 
 
 class UpdateUserRequest(BaseModel):
@@ -71,15 +59,34 @@ class UpdateUserRequest(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _require_admin(request: Request) -> dict:
-    """Extract user state and enforce admin-team membership."""
+async def _require_admin(request: Request) -> dict:
+    """Extract user state and enforce admin role via Keycloak roles or team membership."""
     state = getattr(request.state, "user", None)
     if state is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    if isinstance(state, dict):
+    if not isinstance(state, dict):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Check Keycloak realm roles for "admin"
+    roles = state.get("roles", [])
+    if "admin" in roles:
         return state
-    # ORM User object attached by old auth path — convert
-    return {"user_id": getattr(state, "id", None), "is_admin": False}
+
+    # Fallback: check team membership for admin teams
+    user_id = state.get("user_id")
+    if user_id:
+        async with get_session() as session:
+            user = (await session.execute(
+                sa_select(User)
+                .where(User.id == user_id)
+                .options(selectinload(User.team_memberships).selectinload(TeamMembership.team))
+            )).scalar_one_or_none()
+            if user:
+                for m in user.team_memberships:
+                    if m.team and m.team.is_admin:
+                        return state
+
+    raise HTTPException(status_code=403, detail="Admin access required")
 
 
 def _user_to_response(user: User) -> _schemas.UserResponse:
@@ -101,7 +108,7 @@ def _user_to_response(user: User) -> _schemas.UserResponse:
 @router.get("", response_model=list[_schemas.UserResponse])
 async def list_users(request: Request):
     """List all users in the organisation."""
-    _require_admin(request)
+    await _require_admin(request)
     async with get_session() as session:
         users = (await session.execute(
             sa_select(User)
@@ -115,7 +122,7 @@ async def list_users(request: Request):
 @router.post("", response_model=_schemas.UserResponse, status_code=201)
 async def create_user(body: CreateUserRequest, request: Request):
     """Create a new user (admin only)."""
-    _require_admin(request)
+    await _require_admin(request)
     async with get_session() as session:
         existing = (await session.execute(
             sa_select(User).where(User.email == body.email)
@@ -130,7 +137,7 @@ async def create_user(body: CreateUserRequest, request: Request):
 
         user = User(
             email=body.email,
-            password_hash=_auth_svc.hash_password(body.password),
+            keycloak_id=body.keycloak_id,
             name=body.name,
             org_id=org_id,
         )
@@ -145,7 +152,7 @@ async def create_user(body: CreateUserRequest, request: Request):
 @router.patch("/{user_id}", response_model=_schemas.UserResponse)
 async def update_user(user_id: str, body: UpdateUserRequest, request: Request):
     """Update user name or active status."""
-    _require_admin(request)
+    await _require_admin(request)
     async with get_session() as session:
         user = (await session.execute(
             sa_select(User).where(User.id == user_id)
@@ -168,7 +175,7 @@ async def update_user(user_id: str, body: UpdateUserRequest, request: Request):
 @router.delete("/{user_id}", status_code=204)
 async def deactivate_user(user_id: str, request: Request):
     """Deactivate (soft-delete) a user."""
-    _require_admin(request)
+    await _require_admin(request)
     async with get_session() as session:
         user = (await session.execute(
             sa_select(User).where(User.id == user_id)

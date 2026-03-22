@@ -1,10 +1,10 @@
-// Root application: router with auth guard and all page routes
+// Root application: router with Keycloak auth guard and all page routes
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './components/auth/auth-provider'
 import { AppLayout } from './components/layout/app-layout'
 import { LoginPage } from './components/auth/login-page'
-import { RegisterPage } from './components/auth/register-page'
+import { AuthCallbackPage } from './components/auth/auth-callback-page'
 import { DashboardPage } from './components/dashboard/dashboard-page'
 import { TemplateBrowserPage } from './components/templates/template-browser-page'
 import { JobMonitorPage } from './components/jobs/job-monitor-page'
@@ -56,7 +56,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
       </AuthProvider>

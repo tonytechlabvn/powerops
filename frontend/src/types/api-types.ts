@@ -114,6 +114,7 @@ export interface AuthUser {
   is_active: boolean
   created_at: string
   teams: string[]
+  roles: string[]
 }
 
 export interface TeamInfo {
