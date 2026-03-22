@@ -1,7 +1,7 @@
 {
   "name": "hybrid/wireguard-vpn",
   "display_name": "Hybrid WireGuard VPN (Proxmox + EC2)",
-  "description": "Proxmox VM + AWS EC2 connected via WireGuard VPN. Supports Auto Mode (keys auto-generated) and Manual Mode (bring your own keys). Elastic IP, provisioner-based config delivery.",
+  "description": "One-click deploy: creates BOTH Proxmox VM + AWS EC2 with WireGuard VPN in a single operation. Auto Mode auto-generates all keys. Manual Mode lets you bring your own.",
   "provider": "hybrid",
   "version": "2.0.0",
   "tags": ["hybrid", "wireguard", "vpn", "ec2", "proxmox", "auto-mode", "networking"],

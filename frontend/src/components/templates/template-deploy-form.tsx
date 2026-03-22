@@ -193,7 +193,7 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
                 <Zap size={14} className="text-green-400" />
                 <span className="text-sm font-semibold text-green-300">Auto Mode</span>
               </div>
-              <p className="text-xs text-zinc-300">All parameters are <strong>auto-configured</strong> with sensible defaults. WireGuard keys auto-generated. Just fill required fields and click <strong>Deploy</strong>.</p>
+              <p className="text-xs text-zinc-300">Deploys <strong>both EC2 + Proxmox VM with WireGuard VPN in one click</strong>. All keys auto-generated, all parameters auto-configured. Just click <strong>Deploy</strong>.</p>
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
