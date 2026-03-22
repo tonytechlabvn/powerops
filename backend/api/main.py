@@ -113,6 +113,40 @@ _tpl_routes  = _load("routes/project-template-routes.py",   "routes.project_temp
 _tfc_schemas = _load("schemas/tfc-schemas.py", "schemas.tfc_schemas")
 _tfc_routes  = _load("routes/tfc-routes.py",   "routes.tfc_routes")
 
+# Standard Terraform Workflow — HCL file management (Phase 1)
+_hcl_file_schemas  = _load("schemas/hcl-file-schemas.py",              "schemas.hcl_file_schemas")
+_hcl_file_routes   = _load("routes/hcl-file-routes.py",               "routes.hcl_file_routes")
+_hcl_dir_routes    = _load("routes/hcl-directory-routes.py",           "routes.hcl_directory_routes")
+
+# Standard Terraform Workflow — Environment management (Phase 2)
+_env_schemas       = _load("schemas/environment-schemas.py",           "schemas.environment_schemas")
+_env_routes        = _load("routes/environment-routes.py",             "routes.environment_routes")
+
+# Standard Terraform Workflow — Variable sets (Phase 3)
+_vs_schemas        = _load("schemas/variable-set-schemas.py",          "schemas.variable_set_schemas")
+_vs_routes         = _load("routes/variable-set-routes.py",            "routes.variable_set_routes")
+_vs_assign_routes  = _load("routes/variable-set-assignment-routes.py", "routes.variable_set_assignment_routes")
+
+# Standard Terraform Workflow — VCS workflow enhancement (Phase 4)
+_vcs_plan_schemas  = _load("schemas/vcs-plan-schemas.py",              "schemas.vcs_plan_schemas")
+_vcs_wf_routes     = _load("routes/vcs-workflow-routes.py",            "routes.vcs_workflow_routes")
+
+# Standard Terraform Workflow — Module registry + stacks (Phase 5-7)
+_registry_schemas  = _load("schemas/registry-schemas.py",              "schemas.registry_schemas")
+_registry_routes   = _load("routes/registry-routes.py",                "routes.registry_routes")
+_stack_schemas     = _load("schemas/stack-schemas.py",                  "schemas.stack_schemas")
+_stack_routes      = _load("routes/stack-routes.py",                    "routes.stack_routes")
+
+# Phases 8–11: AI editor, plan explainer, remediation, module generator
+_ai_editor_schemas      = _load("schemas/ai-editor-schemas.py",       "schemas.ai_editor_schemas")
+_plan_analysis_schemas  = _load("schemas/plan-analysis-schemas.py",   "schemas.plan_analysis_schemas")
+_remediation_schemas    = _load("schemas/remediation-schemas.py",     "schemas.remediation_schemas")
+_module_gen_schemas     = _load("schemas/module-generator-schemas.py","schemas.module_generator_schemas")
+_ai_editor_routes       = _load("routes/ai-editor-routes.py",         "routes.ai_editor_routes")
+_plan_analysis_routes   = _load("routes/plan-analysis-routes.py",     "routes.plan_analysis_routes")
+_remediation_routes     = _load("routes/remediation-routes.py",       "routes.remediation_routes")
+_module_gen_routes      = _load("routes/module-generator-routes.py",  "routes.module_generator_routes")
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -240,6 +274,42 @@ def create_app() -> FastAPI:
 
     # Phase 6: HCP Terraform Cloud
     app.include_router(_tfc_routes.router)
+
+    # Standard Terraform Workflow — HCL file management
+    app.include_router(_hcl_file_routes.router)
+    app.include_router(_hcl_dir_routes.search_router)
+    app.include_router(_hcl_dir_routes.dir_router)
+
+    # Standard Terraform Workflow — Environments
+    app.include_router(_env_routes.router)
+
+    # Standard Terraform Workflow — Variable sets
+    app.include_router(_vs_routes.router)
+    app.include_router(_vs_assign_routes.router)
+
+    # Standard Terraform Workflow — VCS workflow
+    app.include_router(_vcs_wf_routes.router)
+
+    # Standard Terraform Workflow — Module registry + stacks
+    app.include_router(_registry_routes.router)
+    if hasattr(_registry_routes, 'v1_router'):
+        app.include_router(_registry_routes.v1_router)
+    app.include_router(_stack_routes.router)
+    if hasattr(_stack_routes, 'upgrades_router'):
+        app.include_router(_stack_routes.upgrades_router)
+    if hasattr(_stack_routes, 'admin_router'):
+        app.include_router(_stack_routes.admin_router)
+
+    # Phases 8–11: AI editor, plan explainer, remediation, module generator
+    app.include_router(_ai_editor_routes.router)
+    app.include_router(_plan_analysis_routes.router)
+    app.include_router(_remediation_routes.router)
+    app.include_router(_module_gen_routes.router)
+
+    # Terraform Registry service discovery (Phase 5)
+    @app.get("/.well-known/terraform.json", include_in_schema=False)
+    async def terraform_service_discovery():
+        return {"modules.v1": "/api/registry/v1/modules/"}
 
     # Keycloak reverse proxy — single-domain setup
     # Routes /auth/* to internal Keycloak container so browser never hits raw IP

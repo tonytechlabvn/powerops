@@ -10,6 +10,7 @@ New models by phase:
   Phase 3 — VCSConnection, WebhookDelivery
   Phase 4 — Policy, PolicySet, PolicySetMember, PolicySetAssignment,
             PolicyCheckResult
+  Phase 10 — RemediationRecord
 
 These models are distinct from the Pydantic schemas in core/models.py.
 """
@@ -129,6 +130,9 @@ class Workspace(Base):
     workspace_dir: Mapped[str] = mapped_column(Text, nullable=False, default="")
     org_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("organizations.id"), nullable=True, default=None,
+    )
+    environment_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("environments.id", ondelete="SET NULL"), nullable=True, default=None,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
@@ -383,6 +387,7 @@ class VCSConnection(Base):
     branch: Mapped[str] = mapped_column(String(128), nullable=False, default="main")
     working_directory: Mapped[str] = mapped_column(String(256), nullable=False, default=".")
     auto_apply: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    trigger_patterns: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
@@ -702,3 +707,324 @@ class ProjectActivity(Base):
 
     def __repr__(self) -> str:
         return f"<ProjectActivity project={self.project_id!r} action={self.action!r}>"
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: AI Remediation — audit trail for suggested and applied fixes
+# ---------------------------------------------------------------------------
+
+
+class RemediationRecord(Base):
+    """Tracks AI-suggested remediations and their outcomes for audit and learning."""
+    __tablename__ = "remediation_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    job_id: Mapped[str | None] = mapped_column(String(36), nullable=True, default=None)
+    error_category: Mapped[str] = mapped_column(String(32), nullable=False)
+    root_cause: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    fixes_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # "suggested" | "applied" | "dismissed"
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="suggested", index=True)
+    applied_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        return f"<RemediationRecord workspace={self.workspace_id!r} status={self.status!r}>"
+
+
+# ---------------------------------------------------------------------------
+# Standard Terraform Workflow: Environments (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class Environment(Base):
+    """Named deployment environment (dev/staging/prod) within an org."""
+    __tablename__ = "environments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    auto_apply: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    require_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", name="uq_environment_org_name"),
+    )
+
+    variables: Mapped[list[EnvironmentVariable]] = relationship(
+        back_populates="environment", lazy="selectin", cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"<Environment name={self.name!r} order={self.order}>"
+
+
+class EnvironmentVariable(Base):
+    """Key-value variable scoped to an environment."""
+    __tablename__ = "environment_variables"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    environment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("environments.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    key: Mapped[str] = mapped_column(String(256), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(16), nullable=False, default="terraform")
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_hcl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        UniqueConstraint("environment_id", "key", name="uq_envvar_env_key"),
+    )
+
+    environment: Mapped[Environment] = relationship(back_populates="variables")
+
+    def __repr__(self) -> str:
+        return f"<EnvironmentVariable key={self.key!r}>"
+
+
+class WorkspaceVariable(Base):
+    """Key-value variable scoped to a workspace (overrides env vars)."""
+    __tablename__ = "workspace_variables"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    key: Mapped[str] = mapped_column(String(256), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(16), nullable=False, default="terraform")
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_hcl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "key", name="uq_wsvar_ws_key"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<WorkspaceVariable key={self.key!r}>"
+
+
+class VCSPlanRun(Base):
+    """Record of a VCS-triggered plan/apply run."""
+    __tablename__ = "vcs_plan_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    vcs_connection_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("vcs_connections.id", ondelete="CASCADE"), nullable=False,
+    )
+    commit_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    branch: Mapped[str] = mapped_column(String(128), nullable=False, default="main")
+    pr_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    run_type: Mapped[str] = mapped_column(String(16), nullable=False, default="plan")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
+    plan_output: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    error_output: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    adds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    changes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    destroys: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None,
+    )
+
+    def __repr__(self) -> str:
+        return f"<VCSPlanRun commit={self.commit_sha[:8]!r} status={self.status!r}>"
+
+
+# ---------------------------------------------------------------------------
+# Standard Terraform Workflow: Variable Sets (Phase 3)
+# ---------------------------------------------------------------------------
+
+
+class VariableSet(Base):
+    """Shared set of variables attachable to multiple workspaces."""
+    __tablename__ = "variable_sets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    is_global: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", name="uq_varset_org_name"),
+    )
+
+    variables: Mapped[list[VariableSetVariable]] = relationship(
+        back_populates="variable_set", lazy="selectin", cascade="all, delete-orphan",
+    )
+    assignments: Mapped[list[VariableSetAssignment]] = relationship(
+        back_populates="variable_set", lazy="selectin", cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"<VariableSet name={self.name!r} global={self.is_global}>"
+
+
+class VariableSetVariable(Base):
+    """Individual variable within a variable set."""
+    __tablename__ = "variable_set_variables"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    variable_set_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("variable_sets.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    key: Mapped[str] = mapped_column(String(256), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(16), nullable=False, default="terraform")
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_hcl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        UniqueConstraint("variable_set_id", "key", name="uq_vsvar_set_key"),
+    )
+
+    variable_set: Mapped[VariableSet] = relationship(back_populates="variables")
+
+    def __repr__(self) -> str:
+        return f"<VariableSetVariable key={self.key!r}>"
+
+
+class VariableSetAssignment(Base):
+    """Links a variable set to a workspace."""
+    __tablename__ = "variable_set_assignments"
+
+    variable_set_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("variable_sets.id", ondelete="CASCADE"), primary_key=True,
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True,
+    )
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    variable_set: Mapped[VariableSet] = relationship(back_populates="assignments")
+
+    def __repr__(self) -> str:
+        return f"<VariableSetAssignment vs={self.variable_set_id!r} ws={self.workspace_id!r}>"
+
+
+# ---------------------------------------------------------------------------
+# Standard Terraform Workflow: Module Registry (Phase 5)
+# ---------------------------------------------------------------------------
+
+
+class RegistryModule(Base):
+    """Published Terraform module in the private registry."""
+    __tablename__ = "registry_modules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False,
+    )
+    namespace: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_url: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    is_deprecated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    download_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "namespace", "name", "provider", name="uq_registry_module"),
+    )
+
+    versions: Mapped[list[RegistryModuleVersion]] = relationship(
+        back_populates="module", lazy="selectin", cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"<RegistryModule {self.namespace}/{self.name}/{self.provider}>"
+
+
+class RegistryModuleVersion(Base):
+    """Specific version of a registry module with archive reference."""
+    __tablename__ = "registry_module_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    module_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("registry_modules.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    version: Mapped[str] = mapped_column(String(32), nullable=False)
+    archive_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    archive_checksum: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    readme_content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    variables_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    outputs_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    resources_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    published_by: Mapped[str] = mapped_column(String(36), nullable=False, default="system")
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("module_id", "version", name="uq_module_version"),
+    )
+
+    module: Mapped[RegistryModule] = relationship(back_populates="versions")
+
+    def __repr__(self) -> str:
+        return f"<RegistryModuleVersion module={self.module_id!r} v={self.version!r}>"
+
+
+class StackTemplate(Base):
+    """Composable stack template built from registry modules."""
+    __tablename__ = "stack_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    definition_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by: Mapped[str] = mapped_column(String(36), nullable=False, default="system")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", name="uq_stack_template_org_name"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<StackTemplate name={self.name!r}>"

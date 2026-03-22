@@ -27,11 +27,16 @@ def _load(filename: str, alias: str):
     return mod
 
 
-generate_prompt = _load("generate-prompt.py", "generate_prompt")
-explain_prompt = _load("explain-prompt.py", "explain_prompt")
-diagnose_prompt = _load("diagnose-prompt.py", "diagnose_prompt")
-review_prompt = _load("review-prompt.py", "review_prompt")
-chat_prompt = _load("chat-prompt.py", "chat_prompt")
+generate_prompt         = _load("generate-prompt.py",        "generate_prompt")
+explain_prompt          = _load("explain-prompt.py",         "explain_prompt")
+diagnose_prompt         = _load("diagnose-prompt.py",        "diagnose_prompt")
+review_prompt           = _load("review-prompt.py",          "review_prompt")
+chat_prompt             = _load("chat-prompt.py",            "chat_prompt")
+# Phases 8–11: new AI feature prompts
+code_assistant_prompt   = _load("code-assistant-prompt.py",  "code_assistant_prompt")
+plan_explainer_prompt   = _load("plan-explainer-prompt.py",  "plan_explainer_prompt")
+remediation_prompt      = _load("remediation-prompt.py",     "remediation_prompt")
+module_generator_prompt = _load("module-generator-prompt.py","module_generator_prompt")
 
 __all__ = [
     "generate_prompt",
@@ -39,4 +44,8 @@ __all__ = [
     "diagnose_prompt",
     "review_prompt",
     "chat_prompt",
+    "code_assistant_prompt",
+    "plan_explainer_prompt",
+    "remediation_prompt",
+    "module_generator_prompt",
 ]

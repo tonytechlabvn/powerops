@@ -16,6 +16,13 @@ import { PolicyPage } from './components/policies/policy-page'
 import { SettingsPage } from './components/settings/settings-page'
 import { ProjectListPage } from './components/projects/project-list-page'
 import { ProjectDetailPage } from './components/projects/project-detail-page'
+import { HCLEditorPage } from './components/editor/hcl-editor-page'
+import { WorkspaceEnvironmentPage } from './components/workspaces/workspace-environment-page'
+import { VariableSetsPage } from './components/variable-sets/variable-sets-page'
+import { ModuleRegistryPage } from './components/registry/module-registry-page'
+import { ModuleDetailPage } from './components/registry/module-detail-page'
+import { StackComposerPage } from './components/stacks/stack-composer-page'
+import { AIModuleGeneratorPage } from './components/registry/ai-module-generator-page'
 
 function ProtectedRoutes() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -46,6 +53,13 @@ function ProtectedRoutes() {
         <Route path="policies" element={<PolicyPage />} />
         <Route path="projects" element={<ProjectListPage />} />
         <Route path="projects/:id" element={<ProjectDetailPage />} />
+        <Route path="workspaces/:id/editor" element={<HCLEditorPage />} />
+        <Route path="environments" element={<WorkspaceEnvironmentPage />} />
+        <Route path="variable-sets" element={<VariableSetsPage />} />
+        <Route path="registry" element={<ModuleRegistryPage />} />
+        <Route path="registry/:moduleId" element={<ModuleDetailPage />} />
+        <Route path="stacks" element={<StackComposerPage />} />
+        <Route path="modules/generate" element={<AIModuleGeneratorPage />} />
         <Route path="config" element={<ProviderConfigPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

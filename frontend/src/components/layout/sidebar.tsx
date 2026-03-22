@@ -12,20 +12,30 @@ import {
   Users,
   LogOut,
   FolderKanban,
+  Layers,
+  Variable,
+  Package,
+  Boxes,
+  Bot,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { setAccessToken } from '../../services/api-client'
 
 const NAV_ITEMS = [
-  { to: '/',            label: 'Dashboard',   icon: LayoutDashboard },
-  { to: '/projects',    label: 'Projects',    icon: FolderKanban },
-  { to: '/templates',   label: 'Templates',   icon: FileCode2 },
-  { to: '/jobs',        label: 'Jobs',         icon: BriefcaseBusiness },
-  { to: '/approvals',   label: 'Approvals',   icon: CheckSquare },
-  { to: '/state',       label: 'State',        icon: Database },
-  { to: '/policies',    label: 'Policies',     icon: Shield },
-  { to: '/config',      label: 'Config',       icon: Settings },
-  { to: '/settings',    label: 'Settings',     icon: Users },
+  { to: '/',               label: 'Dashboard',      icon: LayoutDashboard },
+  { to: '/projects',       label: 'Projects',       icon: FolderKanban },
+  { to: '/environments',   label: 'Environments',   icon: Layers },
+  { to: '/registry',       label: 'Registry',       icon: Package },
+  { to: '/stacks',         label: 'Stacks',         icon: Boxes },
+  { to: '/variable-sets',  label: 'Variables',      icon: Variable },
+  { to: '/templates',      label: 'Templates',      icon: FileCode2 },
+  { to: '/modules/generate', label: 'AI Generator', icon: Bot },
+  { to: '/jobs',           label: 'Jobs',            icon: BriefcaseBusiness },
+  { to: '/approvals',      label: 'Approvals',      icon: CheckSquare },
+  { to: '/state',          label: 'State',           icon: Database },
+  { to: '/policies',       label: 'Policies',        icon: Shield },
+  { to: '/config',         label: 'Config',          icon: Settings },
+  { to: '/settings',       label: 'Settings',        icon: Users },
 ]
 
 export function Sidebar() {
