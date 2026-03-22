@@ -241,13 +241,14 @@ class Organization(Base):
 
 
 class User(Base):
-    """User authenticated via Keycloak OIDC. Auto-provisioned on first login."""
+    """User with email/password auth. Keycloak SSO optional (keycloak_id linked when enabled)."""
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
-    keycloak_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     email: Mapped[str] = mapped_column(String(256), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     name: Mapped[str] = mapped_column(String(128), nullable=False)
+    keycloak_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     org_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("organizations.id"), nullable=True, default=None,
     )

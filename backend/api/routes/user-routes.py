@@ -35,7 +35,18 @@ def _load_schema(rel: str, alias: str):
     return mod
 
 
+def _load_core(rel: str, alias: str):
+    full = f"backend.core.{alias}"
+    if full in _sys.modules:
+        return _sys.modules[full]
+    spec = _ilu.spec_from_file_location(full, _P(__file__).resolve().parent.parent.parent / "core" / rel)
+    mod = _ilu.module_from_spec(spec)  # type: ignore[arg-type]
+    _sys.modules[full] = mod
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
 _schemas  = _load_schema("schemas/auth-schemas.py", "schemas.auth_schemas")
+_auth_svc = _load_core("auth-service.py", "auth_service")
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -47,7 +58,7 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 class CreateUserRequest(BaseModel):
     email: EmailStr
     name: str
-    keycloak_id: str
+    password: str
 
 
 class UpdateUserRequest(BaseModel):
@@ -137,7 +148,7 @@ async def create_user(body: CreateUserRequest, request: Request):
 
         user = User(
             email=body.email,
-            keycloak_id=body.keycloak_id,
+            password_hash=_auth_svc.hash_password(body.password),
             name=body.name,
             org_id=org_id,
         )

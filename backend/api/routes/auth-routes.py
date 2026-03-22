@@ -1,9 +1,11 @@
-"""Auth endpoints: Keycloak OIDC config, callback, logout, me.
+"""Auth endpoints: register, login, refresh, logout, me.
 
-GET  /api/auth/keycloak-config — returns Keycloak OIDC params for frontend redirect
-POST /api/auth/callback        — exchange auth code for tokens (backend code flow)
-POST /api/auth/logout          — clear session
-GET  /api/auth/me              — current user profile
+POST /api/auth/register  — create user + org (first user = admin)
+POST /api/auth/login     — email/password → access token + refresh cookie
+POST /api/auth/refresh   — rotate access token via refresh cookie
+POST /api/auth/logout    — clear refresh cookie
+GET  /api/auth/me        — current user profile
+GET  /api/auth/keycloak-config — Keycloak OIDC params (for future SSO)
 """
 from __future__ import annotations
 
@@ -12,13 +14,12 @@ import logging
 import sys as _sys
 from pathlib import Path as _P
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
-from sqlalchemy import select as sa_select
+from sqlalchemy import func, select as sa_select
 from sqlalchemy.orm import selectinload
 
 from backend.db.database import get_session
-from backend.db.models import TeamMembership, User
+from backend.db.models import Organization, Team, TeamMembership, User
 
 logger = logging.getLogger(__name__)
 
@@ -46,137 +47,119 @@ def _load_schema(rel: str, alias: str):
     return mod
 
 
-_schemas = _load_schema("schemas/auth-schemas.py", "schemas.auth_schemas")
+_auth_svc = _load_core("auth-service.py", "auth_service")
+_schemas  = _load_schema("schemas/auth-schemas.py", "schemas.auth_schemas")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+_REFRESH_COOKIE = "tb_refresh"
 
-@router.get("/keycloak-config")
-async def keycloak_config():
-    """Return Keycloak OIDC connection params for frontend to initiate login."""
+
+@router.post("/register", response_model=_schemas.TokenResponse)
+async def register(body: _schemas.RegisterRequest, response: Response):
+    """Register a new user. First-ever user auto-creates an org and becomes admin."""
+    async with get_session() as session:
+        # Reject duplicate email
+        existing = (await session.execute(
+            sa_select(User).where(User.email == body.email)
+        )).scalar_one_or_none()
+        if existing:
+            raise HTTPException(status_code=409, detail="Email already registered")
+
+        # Determine if this is the very first user
+        user_count = (await session.execute(sa_select(func.count(User.id)))).scalar() or 0
+        is_first = user_count == 0
+
+        # Create or reuse org
+        if is_first:
+            org_name = body.org_name or f"{body.name}'s Org"
+            org = Organization(name=org_name)
+            session.add(org)
+            await session.flush()
+        else:
+            org = (await session.execute(sa_select(Organization))).scalar_one_or_none()
+            if org is None:
+                raise HTTPException(status_code=500, detail="No organisation found")
+
+        # Create user
+        user = User(
+            email=body.email,
+            password_hash=_auth_svc.hash_password(body.password),
+            name=body.name,
+            org_id=org.id,
+        )
+        session.add(user)
+        await session.flush()
+
+        if is_first:
+            admin_team = Team(name="Admins", org_id=org.id, is_admin=True)
+            session.add(admin_team)
+            await session.flush()
+            session.add(TeamMembership(team_id=admin_team.id, user_id=user.id))
+
+        user_id, org_id = user.id, org.id
+
+    access = _auth_svc.create_access_token(user_id, org_id)
+    refresh = _auth_svc.create_refresh_token(user_id)
     from backend.core.config import get_settings
     s = get_settings()
-    # Use public URL for browser redirects, fallback to internal URL
-    public_url = s.keycloak_public_url or s.keycloak_url
-    return {
-        "url": public_url,
-        "realm": s.keycloak_realm,
-        "clientId": "powerops-frontend",
-    }
+    _set_refresh_cookie(response, refresh, s.jwt_refresh_ttl_days * 86400)
+    logger.info("Registered user %s (first=%s)", body.email, is_first)
+    return _schemas.TokenResponse(access_token=access)
 
 
-@router.post("/callback", response_model=_schemas.TokenResponse)
-async def keycloak_callback(request: Request):
-    """Exchange Keycloak authorization code for tokens (backend code flow).
+@router.post("/login", response_model=_schemas.TokenResponse)
+async def login(body: _schemas.LoginRequest, response: Response):
+    """Authenticate with email/password. Returns access token; sets refresh cookie."""
+    async with get_session() as session:
+        user = (await session.execute(
+            sa_select(User).where(User.email == body.email, User.is_active == True)
+        )).scalar_one_or_none()
 
-    Frontend sends { code, redirect_uri } after Keycloak redirect.
-    Backend exchanges code at Keycloak token endpoint, validates JWT,
-    syncs user, and returns access_token.
-    """
+    if user is None or not _auth_svc.verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    access = _auth_svc.create_access_token(user.id, user.org_id or "")
+    refresh = _auth_svc.create_refresh_token(user.id)
     from backend.core.config import get_settings
     s = get_settings()
-
-    body = await request.json()
-    code = body.get("code")
-    redirect_uri = body.get("redirect_uri")
-    code_verifier = body.get("code_verifier")
-    if not code or not redirect_uri:
-        raise HTTPException(status_code=400, detail="Missing code or redirect_uri")
-
-    # Exchange auth code for tokens at Keycloak
-    token_url = f"{s.keycloak_url}/realms/{s.keycloak_realm}/protocol/openid-connect/token"
-    # Use the frontend public client for code exchange (must match the client_id
-    # that initiated the auth request in the browser)
-    frontend_client_id = "powerops-frontend"
-    token_data = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": redirect_uri,
-        "client_id": frontend_client_id,
-    }
-    # PKCE: include code_verifier for proof of possession
-    if code_verifier:
-        token_data["code_verifier"] = code_verifier
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(token_url, data=token_data)
-
-    if resp.status_code != 200:
-        logger.error("Keycloak token exchange failed: %s", resp.text)
-        raise HTTPException(status_code=401, detail="Token exchange failed")
-
-    tokens = resp.json()
-    access_token = tokens.get("access_token")
-
-    # Validate the token and sync user
-    _kc_svc = _load_core("keycloak-auth-service.py", "keycloak_auth_service")
-    try:
-        claims = _kc_svc.validate_keycloak_jwt(access_token)
-        await _kc_svc.sync_keycloak_user(claims)
-    except Exception as exc:
-        logger.error("Token validation after exchange failed: %s", exc)
-        raise HTTPException(status_code=401, detail="Invalid token from Keycloak")
-
-    return _schemas.TokenResponse(
-        access_token=access_token,
-        refresh_token=tokens.get("refresh_token", ""),
-    )
+    _set_refresh_cookie(response, refresh, s.jwt_refresh_ttl_days * 86400)
+    logger.info("User %s logged in", body.email)
+    return _schemas.TokenResponse(access_token=access)
 
 
 @router.post("/refresh", response_model=_schemas.TokenResponse)
-async def refresh_token(request: Request):
-    """Exchange a Keycloak refresh token for a new access token."""
-    from backend.core.config import get_settings
-    s = get_settings()
+async def refresh_token(request: Request, response: Response):
+    """Exchange a valid refresh cookie for a new access token."""
+    raw = request.cookies.get(_REFRESH_COOKIE)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing refresh token")
 
-    body = await request.json()
-    refresh = body.get("refresh_token")
-    if not refresh:
-        raise HTTPException(status_code=400, detail="Missing refresh_token")
+    try:
+        claims = _auth_svc.verify_token(raw)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    token_url = f"{s.keycloak_url}/realms/{s.keycloak_realm}/protocol/openid-connect/token"
-    token_data = {
-        "grant_type": "refresh_token",
-        "refresh_token": refresh,
-        "client_id": "powerops-frontend",
-    }
-    if s.keycloak_client_secret:
-        token_data["client_secret"] = s.keycloak_client_secret
+    if claims.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="Not a refresh token")
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(token_url, data=token_data)
+    user_id = claims["sub"]
+    async with get_session() as session:
+        user = (await session.execute(
+            sa_select(User).where(User.id == user_id, User.is_active == True)
+        )).scalar_one_or_none()
 
-    if resp.status_code != 200:
-        raise HTTPException(status_code=401, detail="Refresh token expired or invalid")
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
 
-    tokens = resp.json()
-    return _schemas.TokenResponse(
-        access_token=tokens["access_token"],
-        refresh_token=tokens.get("refresh_token", refresh),
-    )
+    access = _auth_svc.create_access_token(user.id, user.org_id or "")
+    return _schemas.TokenResponse(access_token=access)
 
 
 @router.post("/logout")
-async def logout(request: Request):
-    """End Keycloak session (optional: revoke refresh token)."""
-    from backend.core.config import get_settings
-    s = get_settings()
-
-    body = await request.json() if request.headers.get("content-type") == "application/json" else {}
-    refresh = body.get("refresh_token")
-
-    if refresh:
-        # Revoke at Keycloak
-        logout_url = f"{s.keycloak_url}/realms/{s.keycloak_realm}/protocol/openid-connect/logout"
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(logout_url, data={
-                    "client_id": "powerops-frontend",
-                    "refresh_token": refresh,
-                })
-        except Exception as exc:
-            logger.warning("Keycloak logout revocation failed: %s", exc)
-
+async def logout(response: Response):
+    """Clear the refresh token cookie."""
+    response.delete_cookie(_REFRESH_COOKIE, path="/", httponly=True, samesite="lax")
     return {"detail": "Logged out"}
 
 
@@ -201,7 +184,6 @@ async def me(request: Request):
             raise HTTPException(status_code=404, detail="User not found")
 
         team_names = [m.team.name for m in user.team_memberships if m.team]
-        roles = state.get("roles", []) if isinstance(state, dict) else []
         return _schemas.UserResponse(
             id=user.id,
             email=user.email,
@@ -209,5 +191,33 @@ async def me(request: Request):
             is_active=user.is_active,
             created_at=user.created_at,
             teams=team_names,
-            roles=roles,
         )
+
+
+@router.get("/keycloak-config")
+async def keycloak_config():
+    """Return Keycloak OIDC params (for future SSO integration)."""
+    from backend.core.config import get_settings
+    s = get_settings()
+    public_url = s.keycloak_public_url or s.keycloak_url
+    return {
+        "url": public_url,
+        "realm": s.keycloak_realm,
+        "clientId": "powerops-frontend",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _set_refresh_cookie(response: Response, token: str, max_age: int) -> None:
+    response.set_cookie(
+        key=_REFRESH_COOKIE,
+        value=token,
+        max_age=max_age,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )

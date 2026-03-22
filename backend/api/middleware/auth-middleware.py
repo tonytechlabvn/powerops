@@ -1,11 +1,12 @@
-"""Dual-mode authentication middleware: Keycloak JWT (RS256) + X-API-Key.
+"""Dual-mode authentication middleware: JWT Bearer + X-API-Key.
 
 Resolution order:
-  1. Authorization: Bearer <jwt>  → validate via Keycloak JWKS, sync user
+  1. Authorization: Bearer <jwt>  → decode HS256, set request.state.user dict
   2. X-API-Key: tb_xxxxx          → hash+lookup, set request.state.user dict
-  3. Public paths                 → pass through without auth
-  4. Non-API paths (SPA/static)   → pass through without auth
-  5. Otherwise                    → 401
+  3. Bootstrap mode (no users)    → pass through without auth
+  4. Public paths                 → pass through without auth
+  5. Non-API paths (SPA/static)   → pass through without auth
+  6. Otherwise                    → 401
 """
 from __future__ import annotations
 
@@ -23,8 +24,8 @@ logger = logging.getLogger(__name__)
 # Exact paths that bypass auth
 _PUBLIC_EXACT: frozenset[str] = frozenset([
     "/api/health",
-    "/api/auth/keycloak-config",
-    "/api/auth/callback",
+    "/api/auth/register",
+    "/api/auth/login",
     "/api/auth/refresh",
     "/docs",
     "/redoc",
@@ -73,11 +74,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if _is_public(path):
             return await call_next(request)
 
-        # --- Try Keycloak JWT Bearer ---
+        # Bootstrap: no users yet → allow everything through
+        if await _no_users_exist():
+            return await call_next(request)
+
+        # --- Try JWT Bearer ---
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
-            user_state = await _decode_keycloak_jwt(token)
+            user_state = _decode_jwt(token)
             if user_state is None:
                 return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
             request.state.user = user_state
@@ -102,16 +107,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-async def _decode_keycloak_jwt(token: str) -> dict | None:
-    """Validate Keycloak JWT via JWKS and sync user to DB."""
+def _decode_jwt(token: str) -> dict | None:
+    """Decode JWT and return state dict, or None on failure."""
     try:
-        _kc_svc = _load_core("keycloak-auth-service.py", "keycloak_auth_service")
-        claims = _kc_svc.validate_keycloak_jwt(token)
-        # Auto-provision/sync user in DB
-        user_state = await _kc_svc.sync_keycloak_user(claims)
-        return user_state
+        _auth_svc = _load_core("auth-service.py", "auth_service")
+        claims = _auth_svc.verify_token(token)
+        if claims.get("type") != "access":
+            return None
+        return {
+            "user_id": claims["sub"],
+            "org_id": claims.get("org"),
+            "via": "jwt",
+        }
     except Exception as exc:
-        logger.debug("Keycloak JWT validation failed: %s", exc)
+        logger.debug("JWT decode failed: %s", exc)
         return None
 
 
@@ -123,3 +132,17 @@ async def _verify_api_key(raw_token: str) -> str | None:
     except Exception as exc:
         logger.error("API key verification error: %s", exc)
         return None
+
+
+async def _no_users_exist() -> bool:
+    """Return True when the users table is empty (initial bootstrap)."""
+    try:
+        from backend.db.database import get_session
+        from backend.db.models import User
+        from sqlalchemy import func, select as sa_select
+
+        async with get_session() as session:
+            count = (await session.execute(sa_select(func.count(User.id)))).scalar()
+            return (count or 0) == 0
+    except Exception:
+        return True

@@ -1,24 +1,34 @@
-"""Pydantic schemas for Auth endpoints (Keycloak OIDC)."""
+"""Pydantic schemas for Auth endpoints."""
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, EmailStr, field_validator
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    org_name: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
 
 
 class TokenResponse(BaseModel):
-    """Returned after Keycloak code exchange or token refresh."""
     access_token: str
-    refresh_token: str = ""
     token_type: str = "bearer"
-
-
-class KeycloakConfigResponse(BaseModel):
-    """Keycloak OIDC connection params for frontend redirect."""
-    url: str
-    realm: str
-    clientId: str
 
 
 class UserResponse(BaseModel):
@@ -28,7 +38,6 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
     teams: list[str] = []
-    roles: list[str] = []
 
     model_config = {"from_attributes": True}
 
@@ -37,7 +46,6 @@ class TeamSummary(BaseModel):
     id: str
     name: str
     is_admin: bool
-
     model_config = {"from_attributes": True}
 
 
@@ -46,7 +54,6 @@ class TeamResponse(BaseModel):
     name: str
     is_admin: bool
     member_count: int = 0
-
     model_config = {"from_attributes": True}
 
 
@@ -76,7 +83,6 @@ class APITokenResponse(BaseModel):
     created_at: datetime
     last_used_at: Optional[datetime] = None
     revoked_at: Optional[datetime] = None
-
     model_config = {"from_attributes": True}
 
 
