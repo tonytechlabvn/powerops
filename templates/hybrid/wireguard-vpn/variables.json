@@ -50,12 +50,6 @@
       "required": false
     },
     {
-      "name": "proxmox_api_url",
-      "type": "string",
-      "description": "Proxmox API endpoint URL (e.g. https://proxmox.example.com:8006/api2/json).",
-      "required": true
-    },
-    {
       "name": "proxmox_tls_insecure",
       "type": "bool",
       "description": "Skip TLS certificate verification for Proxmox API. Set false in production.",

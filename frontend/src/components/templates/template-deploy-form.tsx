@@ -154,8 +154,8 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
   const currentAutoMode = values['auto_mode'] === 'true'
   // Manual-only key fields hidden when auto_mode is on
   const manualKeyFields = ['wg_server_private_key', 'wg_server_public_key', 'wg_client_private_key', 'wg_client_public_key']
-  // In auto mode, only show required fields (no default) — rest use defaults
-  const autoModeRequiredFields = ['proxmox_api_url']
+  // In auto mode, hide all optional fields — proxmox_url comes from project credentials
+  const autoModeRequiredFields: string[] = []
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">

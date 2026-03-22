@@ -32,9 +32,14 @@ provider "aws" {
 }
 
 provider "proxmox" {
-  pm_api_url      = "{{ proxmox_api_url }}"
+  pm_api_url      = var.proxmox_url
   pm_tls_insecure = {{ 'true' if proxmox_tls_insecure | default(false) else 'false' }}
   # Credentials via PROXMOX_USERNAME / PROXMOX_PASSWORD env vars
+}
+
+variable "proxmox_url" {
+  description = "Proxmox API URL (injected from project credentials)"
+  type        = string
 }
 
 {% if auto_mode | default(true) %}
