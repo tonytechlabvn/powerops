@@ -66,12 +66,12 @@ Generate ALL of these files, each wrapped in <file name="filename"> tags:
 Brief description.
 
 ## Usage
-\`\`\`hcl
+```hcl
 module "example" {{
   source = "./modules/<name>"
   # required variables here
 }}
-\`\`\`
+```
 
 ## Inputs
 | Name | Type | Default | Description |
