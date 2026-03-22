@@ -559,6 +559,9 @@ class Project(Base):
     runs: Mapped[list[ProjectRun]] = relationship(
         back_populates="project", lazy="selectin", cascade="all, delete-orphan",
     )
+    activities: Mapped[list[ProjectActivity]] = relationship(
+        back_populates="project", lazy="selectin", cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<Project name={self.name!r} status={self.status!r}>"
@@ -669,3 +672,32 @@ class ProjectRun(Base):
 
     def __repr__(self) -> str:
         return f"<ProjectRun type={self.run_type!r} status={self.status!r}>"
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 (extended): Project Activity Feed
+# ---------------------------------------------------------------------------
+
+
+class ProjectActivity(Base):
+    """Append-only activity log for a project — members, runs, config changes."""
+    __tablename__ = "project_activities"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    module_id: Mapped[str | None] = mapped_column(String(36), nullable=True, default=None)
+    details_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    # Relationships
+    project: Mapped[Project] = relationship(back_populates="activities")
+
+    def __repr__(self) -> str:
+        return f"<ProjectActivity project={self.project_id!r} action={self.action!r}>"

@@ -1,0 +1,67 @@
+name: hybrid-aws-proxmox
+display_name: "Hybrid AWS + Proxmox"
+description: "AWS networking and compute with Proxmox on-premise database — ideal for hybrid cloud workloads requiring low-latency DB access."
+category: hybrid-cloud
+complexity: advanced
+providers: [aws, proxmox]
+tags: [hybrid, vpc, ec2, proxmox, database, vpn]
+
+variables:
+  - name: aws_region
+    type: string
+    default: "us-east-1"
+    description: "AWS region for networking and compute resources"
+  - name: vpc_cidr
+    type: string
+    default: "10.0.0.0/16"
+    description: "CIDR block for the AWS VPC"
+  - name: instance_type
+    type: string
+    default: "t3.medium"
+    description: "EC2 instance type for application servers"
+  - name: proxmox_node
+    type: string
+    default: "pve"
+    description: "Proxmox node name for VM placement"
+  - name: db_vm_memory
+    type: number
+    default: 4096
+    description: "RAM in MB for the Proxmox database VM"
+  - name: db_vm_cores
+    type: number
+    default: 2
+    description: "vCPU cores for the Proxmox database VM"
+  - name: environment
+    type: string
+    default: "production"
+    description: "Deployment environment tag"
+
+modules:
+  - name: aws-networking
+    provider: aws
+    depends_on: []
+    description: "VPC, subnets (public/private), internet gateway, route tables, and security groups. Establishes the AWS network foundation."
+  - name: aws-compute
+    provider: aws
+    depends_on: [aws-networking]
+    description: "EC2 auto-scaling group with application load balancer. Deploys app servers in private subnets."
+  - name: proxmox-database
+    provider: proxmox
+    depends_on: []
+    description: "PostgreSQL database VM on Proxmox with dedicated storage. Accessible via site-to-site VPN or private link."
+
+roles:
+  - workspace-admin
+  - developer
+  - read-only
+
+outputs:
+  - name: vpc_id
+    module: aws-networking
+    description: "AWS VPC identifier"
+  - name: alb_dns_name
+    module: aws-compute
+    description: "Application load balancer DNS name"
+  - name: db_vm_ip
+    module: proxmox-database
+    description: "Proxmox database VM private IP address"

@@ -250,3 +250,14 @@ export interface ProjectDetail extends ProjectSummary {
   members: ProjectMember[]
   runs: ProjectRun[]
 }
+
+// --- Phase 5 (extended): Project Activity Feed ---
+export interface ProjectActivity {
+  id: string
+  project_id: string
+  user_id: string
+  action: string
+  module_id: string | null
+  details_json: string
+  created_at: string
+}

@@ -101,6 +101,17 @@ _policy_routes  = _load("routes/policy-routes.py",   "routes.policy_routes")
 _project_schemas = _load("schemas/project-schemas.py", "schemas.project_schemas")
 _project_routes  = _load("routes/project-routes.py",   "routes.project_routes")
 
+# Phase 5 (exec): Multi-module scaffold + execution routes
+_project_exec_routes = _load("routes/project-execution-routes.py", "routes.project_execution_routes")
+
+# Phase 5: Project templates + AI wizard
+_tpl_schemas = _load("schemas/project-template-schemas.py", "schemas.project_template_schemas")
+_tpl_routes  = _load("routes/project-template-routes.py",   "routes.project_template_routes")
+
+# Phase 6: HCP Terraform Cloud routes
+_tfc_schemas = _load("schemas/tfc-schemas.py", "schemas.tfc_schemas")
+_tfc_routes  = _load("routes/tfc-routes.py",   "routes.tfc_routes")
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -223,6 +234,11 @@ def create_app() -> FastAPI:
 
     # Phase 5: Projects
     app.include_router(_project_routes.router)
+    app.include_router(_project_exec_routes.router)
+    app.include_router(_tpl_routes.router)
+
+    # Phase 6: HCP Terraform Cloud
+    app.include_router(_tfc_routes.router)
 
     # Serve frontend static files in production (built React app at /app/static)
     static_dir = Path(__file__).parent.parent.parent / "static"

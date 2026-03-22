@@ -25,7 +25,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.db.database import get_session
 from backend.db.models import (
-    Project, ProjectCredential, ProjectMember, ProjectModule, ProjectRun, User,
+    Project, ProjectActivity, ProjectCredential, ProjectMember, ProjectModule, ProjectRun, User,
 )
 
 logger = logging.getLogger(__name__)
@@ -153,6 +153,10 @@ async def create_project(body: _schemas.CreateProjectRequest, request: Request):
         ))
         await session.flush()
 
+        await _log_activity(
+            session, project.id, user["user_id"], "project.created",
+            details={"name": project.name},
+        )
         return _project_to_response(project)
 
 
@@ -206,6 +210,10 @@ async def update_project(project_id: str, body: _schemas.UpdateProjectRequest, r
 
         session.add(project)
         await session.flush()
+        await _log_activity(
+            session, project_id, user["user_id"], "project.updated",
+            details={k: v for k, v in body.model_dump().items() if v is not None and k != "config_yaml"},
+        )
         # Refresh relationships
         project = await _get_project_or_404(session, project_id)
         return _project_detail_response(project)
@@ -220,6 +228,9 @@ async def archive_project(project_id: str, request: Request):
         project = await _get_project_or_404(session, project_id)
         project.status = "archived"
         session.add(project)
+        await _log_activity(
+            session, project_id, user["user_id"], "project.archived",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +281,10 @@ async def add_member(project_id: str, body: _schemas.AddMemberRequest, request: 
         )
         session.add(member)
         await session.flush()
+        await _log_activity(
+            session, project_id, user["user_id"], "member.added",
+            details={"target_user_id": body.user_id, "role": body.role_name},
+        )
         return _member_response(member, user)
 
 
@@ -287,6 +302,10 @@ async def remove_member(project_id: str, user_id: str, request: Request):
         if member is None:
             raise HTTPException(status_code=404, detail="Member not found")
         await session.delete(member)
+        await _log_activity(
+            session, project_id, user["user_id"], "member.removed",
+            details={"target_user_id": user_id},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -454,3 +473,55 @@ async def _sync_modules(session, project: Project, new_modules) -> None:
                 name=m.name, path=m.path, provider=m.provider,
                 depends_on=m.depends_on,
             ))
+
+
+async def _log_activity(
+    session,
+    project_id: str,
+    user_id: str,
+    action: str,
+    module_id: str | None = None,
+    details: dict | None = None,
+) -> None:
+    """Append a ProjectActivity row to the session (no flush — caller owns that)."""
+    import json
+    session.add(ProjectActivity(
+        project_id=project_id,
+        user_id=user_id,
+        action=action,
+        module_id=module_id,
+        details_json=json.dumps(details or {}),
+    ))
+
+
+# ---------------------------------------------------------------------------
+# Activities endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/{project_id}/activities")
+async def list_activities(project_id: str, request: Request):
+    """Return the last 50 activity entries for a project."""
+    user = _require_auth(request)
+    async with get_session() as session:
+        await _require_project_member(session, project_id, user)
+        await _get_project_or_404(session, project_id)
+
+        activities = (await session.execute(
+            sa_select(ProjectActivity)
+            .where(ProjectActivity.project_id == project_id)
+            .order_by(ProjectActivity.created_at.desc())
+            .limit(50)
+        )).scalars().all()
+
+        return [
+            {
+                "id": a.id,
+                "project_id": a.project_id,
+                "user_id": a.user_id,
+                "action": a.action,
+                "module_id": a.module_id,
+                "details_json": a.details_json,
+                "created_at": a.created_at.isoformat(),
+            }
+            for a in activities
+        ]

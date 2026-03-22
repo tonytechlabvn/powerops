@@ -1,0 +1,86 @@
+name: aws-multi-tier-web
+display_name: "AWS Multi-Tier Web Application"
+description: "Production-ready AWS architecture: VPC with public/private subnets, EC2 application tier, and RDS managed database."
+category: web-app
+complexity: intermediate
+providers: [aws]
+tags: [aws, vpc, ec2, rds, web, multi-tier, load-balancer]
+
+variables:
+  - name: aws_region
+    type: string
+    default: "us-east-1"
+    description: "AWS region to deploy all resources"
+  - name: vpc_cidr
+    type: string
+    default: "10.0.0.0/16"
+    description: "CIDR block for the VPC"
+  - name: availability_zones
+    type: list
+    default: ["us-east-1a", "us-east-1b"]
+    description: "AZs for multi-AZ deployment"
+  - name: instance_type
+    type: string
+    default: "t3.small"
+    description: "EC2 instance type for web/app servers"
+  - name: min_instances
+    type: number
+    default: 2
+    description: "Minimum number of EC2 instances in the auto-scaling group"
+  - name: max_instances
+    type: number
+    default: 6
+    description: "Maximum number of EC2 instances in the auto-scaling group"
+  - name: db_instance_class
+    type: string
+    default: "db.t3.micro"
+    description: "RDS instance class"
+  - name: db_name
+    type: string
+    default: "appdb"
+    description: "Initial database name"
+  - name: db_username
+    type: string
+    default: "dbadmin"
+    description: "RDS master username"
+  - name: environment
+    type: string
+    default: "production"
+    description: "Deployment environment tag"
+
+modules:
+  - name: vpc-subnets
+    provider: aws
+    depends_on: []
+    description: "VPC with public and private subnets across multiple AZs, internet gateway, NAT gateways, and route tables."
+  - name: security-groups
+    provider: aws
+    depends_on: [vpc-subnets]
+    description: "Security groups for ALB (public HTTPS), EC2 app tier (ALB ingress only), and RDS (app tier ingress only)."
+  - name: ec2-app-tier
+    provider: aws
+    depends_on: [vpc-subnets, security-groups]
+    description: "Application load balancer with EC2 auto-scaling group running in private subnets."
+  - name: rds-database
+    provider: aws
+    depends_on: [vpc-subnets, security-groups]
+    description: "Multi-AZ RDS PostgreSQL instance in private database subnets with automated backups."
+
+roles:
+  - workspace-admin
+  - developer
+  - read-only
+
+outputs:
+  - name: vpc_id
+    module: vpc-subnets
+    description: "VPC identifier"
+  - name: alb_dns_name
+    module: ec2-app-tier
+    description: "Application load balancer DNS name — use as CNAME target"
+  - name: rds_endpoint
+    module: rds-database
+    description: "RDS connection endpoint hostname"
+  - name: rds_port
+    module: rds-database
+    description: "RDS connection port"

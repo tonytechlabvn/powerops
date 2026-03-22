@@ -1,0 +1,82 @@
+name: proxmox-database-farm
+display_name: "Proxmox Database Farm"
+description: "Three Proxmox VMs configured as a database cluster with primary-replica replication — suitable for PostgreSQL or MySQL HA setups."
+category: database
+complexity: intermediate
+providers: [proxmox]
+tags: [proxmox, database, postgresql, mysql, replication, ha, cluster]
+
+variables:
+  - name: proxmox_node
+    type: string
+    default: "pve"
+    description: "Proxmox node name for VM placement"
+  - name: vm_template
+    type: string
+    default: "ubuntu-22.04-template"
+    description: "Proxmox VM template to clone for database VMs"
+  - name: primary_memory
+    type: number
+    default: 8192
+    description: "RAM in MB for the primary database VM"
+  - name: primary_cores
+    type: number
+    default: 4
+    description: "vCPU cores for the primary database VM"
+  - name: replica_memory
+    type: number
+    default: 4096
+    description: "RAM in MB for each replica VM"
+  - name: replica_cores
+    type: number
+    default: 2
+    description: "vCPU cores for each replica VM"
+  - name: disk_size
+    type: string
+    default: "50G"
+    description: "Data disk size for each database VM"
+  - name: network_bridge
+    type: string
+    default: "vmbr0"
+    description: "Proxmox network bridge for VM interfaces"
+  - name: db_network_cidr
+    type: string
+    default: "192.168.10.0/24"
+    description: "Private network CIDR for database cluster communication"
+  - name: environment
+    type: string
+    default: "production"
+    description: "Deployment environment tag"
+
+modules:
+  - name: db-primary
+    provider: proxmox
+    depends_on: []
+    description: "Primary database VM with full read-write access. Configured with dedicated data disk and network interface on the DB VLAN."
+  - name: db-replica-1
+    provider: proxmox
+    depends_on: [db-primary]
+    description: "First read replica VM. Streams WAL/binlog replication from primary. Used for read scaling and failover."
+  - name: db-replica-2
+    provider: proxmox
+    depends_on: [db-primary]
+    description: "Second read replica VM for additional redundancy. Can be promoted to primary in a failover scenario."
+
+roles:
+  - workspace-admin
+  - developer
+  - read-only
+
+outputs:
+  - name: primary_ip
+    module: db-primary
+    description: "Primary database VM IP address"
+  - name: replica_1_ip
+    module: db-replica-1
+    description: "First replica VM IP address"
+  - name: replica_2_ip
+    module: db-replica-2
+    description: "Second replica VM IP address"
+  - name: cluster_vip
+    module: db-primary
+    description: "Virtual IP for the database cluster (if keepalived configured)"

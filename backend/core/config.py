@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     # --- Phase 4: Policy (OPA) ---
     # OPA sidecar URL
     opa_url: str = "http://opa:8181"
+
+    # --- HCP Terraform Cloud ---
+    tfc_api_token: str = ""
+    tfc_base_url: str = "https://app.terraform.io"
     # Enable/disable policy checks on runs
     policy_check_enabled: bool = True
 
