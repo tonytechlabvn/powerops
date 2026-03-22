@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, HelpCircle, BookOpen, ChevronDown, ChevronUp, Zap } from 'lucide-react'
+import { Loader2, HelpCircle, BookOpen, ChevronDown, ChevronUp, Zap, Settings2 } from 'lucide-react'
 import { usePlanMutation } from '../../hooks/use-api'
 import type { Template, TemplateVariable } from '../../types/api-types'
 import { VARIABLE_GUIDES } from './variable-guides'
@@ -145,6 +145,7 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
     }
   }
 
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const hasGuides = template.variables.some(v => VARIABLE_GUIDES[v.name])
   const isAutoMode = template.tags.includes('auto-mode')
   const isAwsSide = template.name.includes('aws-side')
@@ -153,6 +154,8 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
   const currentAutoMode = values['auto_mode'] === 'true'
   // Manual-only key fields hidden when auto_mode is on
   const manualKeyFields = ['wg_server_private_key', 'wg_server_public_key', 'wg_client_private_key', 'wg_client_public_key']
+  // In auto mode, only show required fields (no default) — rest use defaults
+  const autoModeRequiredFields = ['proxmox_api_url']
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -185,12 +188,20 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
             </button>
           </div>
           {currentAutoMode ? (
-            <div className="bg-green-600/10 border border-green-500/30 rounded-md p-3">
+            <div className="bg-green-600/10 border border-green-500/30 rounded-md p-3 space-y-2">
               <div className="flex items-center gap-2 mb-1">
                 <Zap size={14} className="text-green-400" />
                 <span className="text-sm font-semibold text-green-300">Auto Mode</span>
               </div>
-              <p className="text-xs text-zinc-300">All WireGuard keys are <strong>auto-generated</strong> on deploy. No manual key generation needed. Requires <code className="bg-zinc-800 px-1 rounded">wg</code> + <code className="bg-zinc-800 px-1 rounded">jq</code> on the Terraform host.</p>
+              <p className="text-xs text-zinc-300">All parameters are <strong>auto-configured</strong> with sensible defaults. WireGuard keys auto-generated. Just fill required fields and click <strong>Deploy</strong>.</p>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-300 transition-colors"
+              >
+                <Settings2 size={12} />
+                {showAdvanced ? 'Hide advanced settings' : 'Show advanced settings'}
+              </button>
             </div>
           ) : (
             <div className="bg-blue-600/10 border border-blue-500/30 rounded-md p-3">
@@ -254,6 +265,10 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
             if (variable.name === 'auto_mode') return false
             // Hide manual key fields when auto_mode is on
             if (hasAutoModeVar && currentAutoMode && manualKeyFields.includes(variable.name)) return false
+            // In auto mode: only show required fields, hide rest unless "Show advanced"
+            if (hasAutoModeVar && currentAutoMode && !showAdvanced) {
+              if (!variable.required && !autoModeRequiredFields.includes(variable.name)) return false
+            }
             return true
           })
           .map(variable => (
