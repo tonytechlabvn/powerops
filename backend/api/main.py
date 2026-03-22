@@ -151,6 +151,10 @@ _module_gen_routes      = _load("routes/module-generator-routes.py",  "routes.mo
 _kb_schemas = _load("schemas/kb-schemas.py", "schemas.kb_schemas")
 _kb_routes  = _load("routes/kb-routes.py",   "routes.kb_routes")
 
+# AI Template Studio
+_ai_studio_schemas = _load("schemas/ai-studio-schemas.py", "schemas.ai_studio_schemas")
+_ai_studio_routes  = _load("routes/ai-studio-routes.py",   "routes.ai_studio_routes")
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -312,6 +316,9 @@ def create_app() -> FastAPI:
 
     # Phase 12: Knowledge Base
     app.include_router(_kb_routes.router)
+
+    # AI Template Studio
+    app.include_router(_ai_studio_routes.router)
 
     # Terraform Registry service discovery (Phase 5)
     @app.get("/.well-known/terraform.json", include_in_schema=False)

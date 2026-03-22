@@ -4,6 +4,57 @@
 
 ### Added
 
+#### AI Studio — Unified Template Creation Hub (2026-03-23)
+- **New feature: AI Studio** — Replaces "AI Generator" with comprehensive template creation hub at `/studio`
+  - **Creator Mode**: Natural language → HCL template (describe infrastructure, Claude generates code)
+  - **Extractor Mode**: HCL → Parameterized template (paste existing code, auto-extract variables)
+  - **Wizard Mode**: AI-guided form (step-by-step questions with intelligent suggestions)
+  - **Canvas Mode**: Visual infrastructure designer (React Flow graph with drag-drop resources, real-time preview)
+
+- **Backend Components**
+  - `AITemplateStudio` service — unified template creation orchestration
+  - `TemplateStudioHelpers` — LLM prompt engineering and template generation
+  - Specialized prompts: template-studio-prompt, wizard-step-prompt
+  - Request/response schemas in `ai-studio-schemas.py`
+  - 7 API endpoints under `/api/ai/studio/*`
+
+- **Frontend Components**
+  - `AIStudioPage` — main studio hub with mode selection
+  - `StudioCreatorPanel` — NL input → template generation UI
+  - `StudioExtractorPanel` — HCL paste/upload → parameterization UI
+  - `StudioWizardPanel` — form-based multi-step template builder
+  - `WizardStepProvider` & `WizardStepFields` — step management and rendering
+  - `StudioCanvasPanel` — visual designer with React Flow canvas
+  - `ResourceNodes` & `ResourcePalette` — canvas resource library
+  - `CanvasPreviewSidebar` — real-time HCL preview from canvas design
+  - `StudioChatPanel` — chat interface for template refinement
+  - `StudioFilePreview` — syntax-highlighted template preview
+
+- **State Management**
+  - `use-template-studio` hook — API calls and state sync
+  - `canvas-store.ts` (Zustand) — visual canvas state, node/edge management
+
+- **UI/UX Features**
+  - Seamless mode switching with context preservation
+  - Real-time HCL preview in all modes
+  - Resource palette for canvas mode
+  - Step-by-step wizard with back/forward navigation
+  - Template validation before saving
+  - Syntax highlighting for HCL code
+  - Responsive design (mobile-friendly)
+
+- **Migration**
+  - Old `/modules/generate` route redirects to `/studio`
+  - Sidebar "AI Generator" link updated to "AI Studio"
+  - Backward-compatible with existing templates
+
+**Files Added: 25 files (8500+ lines)**
+- Backend: 6 files (service, helpers, prompts, schemas, routes)
+- Frontend: 16 files (pages, components, hooks, store)
+- Tests: 2 files (unit tests for service and routes)
+
+---
+
 #### Hybrid WireGuard VPN Template (2026-03-22)
 - **New template: `hybrid/wireguard-vpn`** — Proxmox VM + AWS EC2 connected via WireGuard VPN
   - EC2 as WireGuard server with Elastic IP for stable endpoint

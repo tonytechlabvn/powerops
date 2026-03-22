@@ -23,6 +23,7 @@ import { ModuleRegistryPage } from './components/registry/module-registry-page'
 import { ModuleDetailPage } from './components/registry/module-detail-page'
 import { StackComposerPage } from './components/stacks/stack-composer-page'
 import { AIModuleGeneratorPage } from './components/registry/ai-module-generator-page'
+import { AIStudioPage } from './components/studio/ai-studio-page'
 import { KBLandingPage } from './components/kb/kb-landing-page'
 import { KBChapterPage } from './components/kb/kb-chapter-page'
 import { KBQuizPage } from './components/kb/kb-quiz-page'
@@ -64,7 +65,9 @@ function ProtectedRoutes() {
         <Route path="registry" element={<ModuleRegistryPage />} />
         <Route path="registry/:moduleId" element={<ModuleDetailPage />} />
         <Route path="stacks" element={<StackComposerPage />} />
-        <Route path="modules/generate" element={<AIModuleGeneratorPage />} />
+        <Route path="studio" element={<AIStudioPage />} />
+        <Route path="studio/edit/*" element={<AIStudioPage />} />
+        <Route path="modules/generate" element={<Navigate to="/studio" replace />} />
         <Route path="kb" element={<KBLandingPage />} />
         <Route path="kb/:slug" element={<KBChapterPage />} />
         <Route path="kb/:slug/quiz" element={<KBQuizPage />} />

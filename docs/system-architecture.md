@@ -19,6 +19,7 @@ PowerOps is an enterprise Terraform automation platform with multi-tenant suppor
 
 #### Core Engine
 - **AI Agent** (Claude Sonnet) — HCL generation, code review, resource explanation, error diagnostics
+- **AI Template Studio** — Unified template creation hub with 4 modes (Creator, Extractor, Wizard, Canvas)
 - **HCL Validator** — Syntax validation, resource type checking
 - **Cost Estimator** — Monthly USD cost projections from terraform plan
 - **Terraform Runner** — Subprocess execution with streaming logs
@@ -80,12 +81,20 @@ Located at `backend/kb/`:
 **React 18 + Vite + TypeScript**
 - TailwindCSS for styling
 - WebSocket/Server-Sent Events for streaming logs
+- @xyflow/react for visual canvas design
+- Zustand for canvas state management
 - KB module routes:
   - `/kb` — curriculum overview with chapter cards
   - `/kb/:slug` — full chapter content
   - `/kb/:slug/quiz` — quiz interface with MCQ
   - `/kb/:slug/lab` — lab editor with HCL validation
   - `/kb/leaderboard` — team rankings with badges
+- AI Studio routes:
+  - `/studio` — unified template creation hub
+  - `/studio/creator` — Natural Language → Template mode
+  - `/studio/extractor` — HCL → Template mode
+  - `/studio/wizard` — AI-guided form mode
+  - `/studio/canvas` — React Flow visual designer mode
 
 ### Database Layer
 
@@ -109,10 +118,9 @@ Main tables:
 - **Anthropic Claude API** — AI-powered features
 - **OPA** — Policy evaluation via sidecar
 
-## KB Module API
+## API Endpoints
 
-12 endpoints under `/api/kb/`:
-
+### KB Module API (12 endpoints under `/api/kb/`)
 ```
 GET    /api/kb/curriculum              — List chapters + user progress
 GET    /api/kb/chapters/{slug}         — Full chapter content
@@ -128,7 +136,39 @@ GET    /api/kb/glossary                — All glossary concepts
 GET    /api/kb/glossary/{term}         — Single glossary definition
 ```
 
+### AI Studio API (7 endpoints under `/api/ai/studio/`)
+```
+POST   /api/ai/studio/create           — Natural Language → HCL template generation
+POST   /api/ai/studio/extract          — HCL → Template extraction and parameterization
+POST   /api/ai/studio/wizard/step      — AI-guided form wizard steps
+POST   /api/ai/studio/canvas/validate  — Validate canvas design and generate template
+POST   /api/ai/studio/preview          — Preview generated template from any mode
+POST   /api/ai/studio/save             — Save template artifact
+POST   /api/ai/studio/list             — List user's saved studio templates
+```
+
 ## Data Flow
+
+### AI Studio Template Creation Flow
+1. User selects mode (Creator, Extractor, Wizard, or Canvas)
+2. **Creator Mode**: User describes infrastructure in natural language
+   - POST `/api/ai/studio/create` → Claude generates parameterized HCL
+   - User reviews and optionally edits template
+   - POST `/api/ai/studio/save` → saves as reusable template
+3. **Extractor Mode**: User pastes or uploads existing HCL
+   - POST `/api/ai/studio/extract` → Claude identifies parameters and variables
+   - Template extracted with parameterization suggestions
+   - POST `/api/ai/studio/save` → saves as reusable template
+4. **Wizard Mode**: User answers guided form questions
+   - GET steps for wizard form (infrastructure type, provider, etc.)
+   - POST `/api/ai/studio/wizard/step` → next step based on answers
+   - Claude generates template incrementally from responses
+   - POST `/api/ai/studio/save` → saves as reusable template
+5. **Canvas Mode**: User visually designs infrastructure
+   - React Flow visual designer with resource nodes and connections
+   - Real-time canvas state persisted to Zustand store
+   - POST `/api/ai/studio/canvas/validate` → validates design and generates HCL
+   - POST `/api/ai/studio/save` → saves canvas layout + template
 
 ### KB Learning Flow
 1. User GET `/api/kb/curriculum` → loads chapter list with progress

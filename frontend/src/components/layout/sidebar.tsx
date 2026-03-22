@@ -30,7 +30,7 @@ const NAV_ITEMS = [
   { to: '/stacks',         label: 'Stacks',         icon: Boxes },
   { to: '/variable-sets',  label: 'Variables',      icon: Variable },
   { to: '/templates',      label: 'Templates',      icon: FileCode2 },
-  { to: '/modules/generate', label: 'AI Generator', icon: Bot },
+  { to: '/studio', label: 'AI Studio', icon: Bot },
   { to: '/kb',               label: 'Knowledge Base', icon: GraduationCap },
   { to: '/jobs',           label: 'Jobs',            icon: BriefcaseBusiness },
   { to: '/approvals',      label: 'Approvals',      icon: CheckSquare },
