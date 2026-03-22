@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await fetchMe()
         } catch {
           setAccessToken(null)
-          _refreshToken = null
+          setRefreshToken(null)
           setIsAuthenticated(false)
         }
       }
