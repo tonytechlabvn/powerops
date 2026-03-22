@@ -11,12 +11,14 @@ import {
   Shield,
   Users,
   LogOut,
+  FolderKanban,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { setAccessToken } from '../../services/api-client'
 
 const NAV_ITEMS = [
   { to: '/',            label: 'Dashboard',   icon: LayoutDashboard },
+  { to: '/projects',    label: 'Projects',    icon: FolderKanban },
   { to: '/templates',   label: 'Templates',   icon: FileCode2 },
   { to: '/jobs',        label: 'Jobs',         icon: BriefcaseBusiness },
   { to: '/approvals',   label: 'Approvals',   icon: CheckSquare },

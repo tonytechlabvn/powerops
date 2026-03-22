@@ -188,3 +188,65 @@ export interface PolicyTestResult {
   warnings: Array<{ resource: string; message: string; severity: string }>
   passed: boolean
 }
+
+// --- Phase 5: Projects ---
+export type ProjectStatus = 'draft' | 'active' | 'archived'
+export type ModuleStatus = 'pending' | 'planning' | 'applying' | 'applied' | 'failed'
+
+export interface ProjectModule {
+  id: string
+  name: string
+  path: string
+  provider: string
+  depends_on: string[]
+  status: ModuleStatus
+  last_run_id: string | null
+}
+
+export interface ProjectMember {
+  user_id: string
+  user_email: string
+  user_name: string
+  role_name: string
+  assigned_modules: string[]
+  joined_at: string
+}
+
+export interface ProjectRun {
+  id: string
+  module_id: string
+  module_name: string
+  user_id: string
+  run_type: string
+  status: string
+  started_at: string
+  completed_at: string | null
+}
+
+export interface ProjectCredential {
+  id: string
+  provider: string
+  is_sensitive: boolean
+  created_by: string
+  created_at: string
+}
+
+export interface ProjectSummary {
+  id: string
+  name: string
+  description: string
+  status: ProjectStatus
+  created_by: string
+  created_at: string
+  updated_at: string
+  module_count: number
+  member_count: number
+}
+
+export interface ProjectDetail extends ProjectSummary {
+  config_yaml: string
+  org_id: string | null
+  modules: ProjectModule[]
+  members: ProjectMember[]
+  runs: ProjectRun[]
+}

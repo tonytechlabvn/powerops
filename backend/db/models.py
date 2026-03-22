@@ -515,3 +515,157 @@ class PolicyCheckResult(Base):
 
     def __repr__(self) -> str:
         return f"<PolicyCheckResult policy={self.policy_name!r} passed={self.passed}>"
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Projects — multi-provider orchestration
+# ---------------------------------------------------------------------------
+
+
+class Project(Base):
+    """Top-level project grouping modules, members, credentials, and runs."""
+    __tablename__ = "projects"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    config_yaml: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    org_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True, default=None,
+    )
+    created_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", name="uq_project_org_name"),
+    )
+
+    # Relationships
+    modules: Mapped[list[ProjectModule]] = relationship(
+        back_populates="project", lazy="selectin", cascade="all, delete-orphan",
+    )
+    members: Mapped[list[ProjectMember]] = relationship(
+        back_populates="project", lazy="selectin", cascade="all, delete-orphan",
+    )
+    credentials: Mapped[list[ProjectCredential]] = relationship(
+        back_populates="project", lazy="selectin", cascade="all, delete-orphan",
+    )
+    runs: Mapped[list[ProjectRun]] = relationship(
+        back_populates="project", lazy="selectin", cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"<Project name={self.name!r} status={self.status!r}>"
+
+
+class ProjectModule(Base):
+    """A Terraform module within a project (e.g. aws-networking, proxmox-database)."""
+    __tablename__ = "project_modules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    path: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    depends_on: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    last_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, default=None)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_project_module_name"),
+    )
+
+    # Relationships
+    project: Mapped[Project] = relationship(back_populates="modules")
+
+    def __repr__(self) -> str:
+        return f"<ProjectModule name={self.name!r} provider={self.provider!r}>"
+
+
+class ProjectMember(Base):
+    """User assignment to a project with a role and optional module scope."""
+    __tablename__ = "project_members"
+
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True,
+    )
+    role_name: Mapped[str] = mapped_column(String(64), nullable=False, default="user")
+    assigned_modules: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    # Relationships
+    project: Mapped[Project] = relationship(back_populates="members")
+    user: Mapped[User] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<ProjectMember project={self.project_id!r} user={self.user_id!r} role={self.role_name!r}>"
+
+
+class ProjectCredential(Base):
+    """Encrypted provider credentials scoped to a project."""
+    __tablename__ = "project_credentials"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    credential_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "provider", name="uq_project_credential_provider"),
+    )
+
+    # Relationships
+    project: Mapped[Project] = relationship(back_populates="credentials")
+
+    def __repr__(self) -> str:
+        return f"<ProjectCredential project={self.project_id!r} provider={self.provider!r}>"
+
+
+class ProjectRun(Base):
+    """Record of a terraform plan/apply/destroy for a project module."""
+    __tablename__ = "project_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    module_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("project_modules.id", ondelete="CASCADE"), nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    run_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    output_log: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None,
+    )
+
+    # Relationships
+    project: Mapped[Project] = relationship(back_populates="runs")
+    module: Mapped[ProjectModule] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<ProjectRun type={self.run_type!r} status={self.status!r}>"

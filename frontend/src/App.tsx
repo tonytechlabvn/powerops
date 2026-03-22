@@ -14,6 +14,8 @@ import { ProviderConfigPage } from './components/config/provider-config-page'
 import { StatePage } from './components/state/state-page'
 import { PolicyPage } from './components/policies/policy-page'
 import { SettingsPage } from './components/settings/settings-page'
+import { ProjectListPage } from './components/projects/project-list-page'
+import { ProjectDetailPage } from './components/projects/project-detail-page'
 
 function ProtectedRoutes() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -42,6 +44,8 @@ function ProtectedRoutes() {
         <Route path="approvals" element={<ApprovalPanelPage />} />
         <Route path="state" element={<StatePage />} />
         <Route path="policies" element={<PolicyPage />} />
+        <Route path="projects" element={<ProjectListPage />} />
+        <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="config" element={<ProviderConfigPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

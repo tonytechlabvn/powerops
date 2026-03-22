@@ -97,6 +97,10 @@ _vcs_routes      = _load("routes/vcs-routes.py",       "routes.vcs_routes")
 _policy_schemas = _load("schemas/policy-schemas.py", "schemas.policy_schemas")
 _policy_routes  = _load("routes/policy-routes.py",   "routes.policy_routes")
 
+# Phase 5: Project routes
+_project_schemas = _load("schemas/project-schemas.py", "schemas.project_schemas")
+_project_routes  = _load("routes/project-routes.py",   "routes.project_routes")
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -216,6 +220,9 @@ def create_app() -> FastAPI:
 
     # Phase 4: Policy
     app.include_router(_policy_routes.router)
+
+    # Phase 5: Projects
+    app.include_router(_project_routes.router)
 
     # Serve frontend static files in production (built React app at /app/static)
     static_dir = Path(__file__).parent.parent.parent / "static"
