@@ -1,0 +1,9 @@
+{
+  "name": "hybrid/wireguard-proxmox-side",
+  "display_name": "WireGuard VPN — Proxmox Side (VM + Client)",
+  "description": "On-premise side of a hybrid WireGuard VPN. Creates Proxmox VM with WireGuard client connecting to AWS. Auto-generates client keys. Pair with hybrid/wireguard-aws-side.",
+  "provider": "hybrid",
+  "version": "1.0.0",
+  "tags": ["hybrid", "wireguard", "vpn", "proxmox", "on-premise", "auto-mode"],
+  "author": "TerraBot"
+}

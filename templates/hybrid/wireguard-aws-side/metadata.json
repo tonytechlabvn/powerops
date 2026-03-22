@@ -1,0 +1,9 @@
+{
+  "name": "hybrid/wireguard-aws-side",
+  "display_name": "WireGuard VPN — AWS Side (EC2 Server + VM)",
+  "description": "AWS side of a hybrid WireGuard VPN. Creates EC2 WireGuard server with Elastic IP + 1 EC2 workload VM. Auto-generates server keys. Pair with hybrid/wireguard-proxmox-side.",
+  "provider": "hybrid",
+  "version": "1.0.0",
+  "tags": ["hybrid", "wireguard", "vpn", "ec2", "aws", "auto-mode"],
+  "author": "TerraBot"
+}
