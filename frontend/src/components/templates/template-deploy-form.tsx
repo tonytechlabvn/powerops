@@ -149,7 +149,6 @@ export function TemplateDeployForm({ template }: TemplateDeployFormProps) {
   const isAutoMode = template.tags.includes('auto-mode')
   const isAwsSide = template.name.includes('aws-side')
   const isProxmoxSide = template.name.includes('proxmox-side')
-  const isCombinedVpn = template.name === 'hybrid/wireguard-vpn'
   const hasAutoModeVar = template.variables.some(v => v.name === 'auto_mode')
   const currentAutoMode = values['auto_mode'] === 'true'
   // Manual-only key fields hidden when auto_mode is on
