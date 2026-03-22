@@ -24,7 +24,7 @@
     {
       "name": "wg_instance_type",
       "type": "string",
-      "description": "EC2 instance type for WireGuard server (t3.micro sufficient).",
+      "description": "EC2 instance type for WireGuard server.",
       "default": "t3.micro",
       "required": false
     },
@@ -45,27 +45,21 @@
     {
       "name": "allowed_ssh_cidr",
       "type": "string",
-      "description": "CIDR block allowed SSH access. Restrict to your IP.",
+      "description": "CIDR block allowed SSH access.",
       "default": "0.0.0.0/0",
       "required": false
     },
     {
-      "name": "wg_client_public_key",
-      "type": "string",
-      "description": "WireGuard client public key from the Proxmox-side template output.",
-      "required": true
-    },
-    {
       "name": "wg_server_ip",
       "type": "string",
-      "description": "WireGuard tunnel IP for this server.",
+      "description": "WireGuard tunnel IP for server.",
       "default": "10.100.0.1",
       "required": false
     },
     {
       "name": "wg_client_ip",
       "type": "string",
-      "description": "WireGuard tunnel IP for the Proxmox client.",
+      "description": "WireGuard tunnel IP for Proxmox client.",
       "default": "10.100.0.2",
       "required": false
     },

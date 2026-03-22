@@ -1,15 +1,9 @@
 {
   "variables": [
     {
-      "name": "proxmox_api_url",
-      "type": "string",
-      "description": "Proxmox API endpoint URL (e.g. https://proxmox.local:8006/api2/json).",
-      "required": true
-    },
-    {
       "name": "proxmox_tls_insecure",
       "type": "bool",
-      "description": "Skip TLS verification for Proxmox API. Set false in production.",
+      "description": "Skip TLS verification for Proxmox API.",
       "default": false,
       "required": false
     },
@@ -37,7 +31,7 @@
     {
       "name": "template_name",
       "type": "string",
-      "description": "Proxmox VM template to clone (Ubuntu cloud-init image).",
+      "description": "Proxmox VM template to clone (Ubuntu cloud-init).",
       "default": "ubuntu-22.04-cloudinit",
       "required": false
     },
@@ -65,61 +59,49 @@
     {
       "name": "storage_pool",
       "type": "string",
-      "description": "Proxmox storage pool for VM disk.",
+      "description": "Proxmox storage pool.",
       "default": "local-lvm",
       "required": false
     },
     {
       "name": "proxmox_vm_ip",
       "type": "string",
-      "description": "Static IP with CIDR (e.g. 192.168.1.100/24) or 'dhcp'.",
+      "description": "Static IP with CIDR or 'dhcp'.",
       "default": "dhcp",
       "required": false
     },
     {
       "name": "proxmox_vm_gateway",
       "type": "string",
-      "description": "Default gateway. Required when proxmox_vm_ip is not 'dhcp'.",
+      "description": "Default gateway (required when not dhcp).",
       "default": "",
       "required": false
     },
     {
       "name": "proxmox_ssh_user",
       "type": "string",
-      "description": "SSH user for provisioner connection.",
+      "description": "SSH user for provisioner.",
       "default": "ubuntu",
       "required": false
     },
     {
-      "name": "wg_server_public_key",
-      "type": "string",
-      "description": "WireGuard server public key from the AWS-side template output.",
-      "required": true
-    },
-    {
-      "name": "wg_server_endpoint",
-      "type": "string",
-      "description": "WireGuard server endpoint (IP:port) from the AWS-side template output.",
-      "required": true
-    },
-    {
       "name": "wg_server_ip",
       "type": "string",
-      "description": "WireGuard tunnel IP of the AWS server.",
+      "description": "WireGuard tunnel IP of AWS server.",
       "default": "10.100.0.1",
       "required": false
     },
     {
       "name": "wg_client_ip",
       "type": "string",
-      "description": "WireGuard tunnel IP for this Proxmox client.",
+      "description": "WireGuard tunnel IP for this client.",
       "default": "10.100.0.2",
       "required": false
     },
     {
       "name": "aws_vpc_cidr",
       "type": "string",
-      "description": "AWS VPC CIDR to route via WireGuard (e.g. 10.0.0.0/16). Leave empty for tunnel-only.",
+      "description": "AWS VPC CIDR to route via WireGuard. Leave empty for tunnel-only.",
       "default": "",
       "required": false
     },
