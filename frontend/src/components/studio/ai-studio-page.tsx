@@ -85,7 +85,7 @@ export function AIStudioPage() {
   }
 
   // Use manual validation if available, otherwise template's built-in validation
-  const activeValidation = manualValidation ?? activeValidation ?? null
+  const activeValidation = manualValidation ?? state.template?.validation ?? null
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-zinc-100">
