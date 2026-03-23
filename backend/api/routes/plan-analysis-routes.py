@@ -55,8 +55,10 @@ def _sse_response(generator) -> StreamingResponse:
 def _get_explainer():
     from backend.core import load_kebab_module
     from backend.core.config import get_settings
+    from backend.core.llm import get_llm_client
     svc_mod = load_kebab_module("ai-plan-explainer-service.py", "ai_plan_explainer_service")
-    return svc_mod.AIPlanExplainerService(config=get_settings())
+    cfg = get_settings()
+    return svc_mod.AIPlanExplainerService(client=get_llm_client(cfg), max_tokens=cfg.ai_max_tokens)
 
 
 # ---------------------------------------------------------------------------

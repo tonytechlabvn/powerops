@@ -1,6 +1,6 @@
-"""AI-powered code assistant wrapping AIAgent with workspace-aware context injection.
+"""AI-powered code assistant wrapping LLMClient with workspace-aware context injection.
 
-Extends AIAgent with editor-specific operations: streaming generation, explanation,
+Extends LLMClient with editor-specific operations: streaming generation, explanation,
 fix suggestion, inline completion, and chat — all with workspace file context.
 """
 from __future__ import annotations
@@ -9,9 +9,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, AsyncGenerator
 
-import anthropic
-
-from backend.core.config import Settings
+from backend.core.llm import LLMError
 
 if TYPE_CHECKING:
     pass
@@ -28,26 +26,18 @@ def _load_prompts():
     return load_kebab_module("prompts/code-assistant-prompt.py", "prompts.code_assistant_prompt")
 
 
-def _load_helpers():
-    """Lazy-load ai-agent-helpers module."""
-    from backend.core import load_kebab_module
-    return load_kebab_module("ai-agent-helpers.py", "ai_agent_helpers")
-
-
 class AICodeAssistant:
-    """Claude-backed code assistant for HCL editing with workspace context.
+    """LLM-backed code assistant for HCL editing with workspace context.
 
     Args:
-        config: Application Settings instance.
+        client: An LLMClient instance.
+        max_tokens: Max tokens for completions.
         workspace_dir: Path to the active workspace directory.
     """
 
-    def __init__(self, config: Settings, workspace_dir: Path | None = None) -> None:
-        if not config.anthropic_api_key:
-            raise ValueError("TERRABOT_ANTHROPIC_API_KEY is not set.")
-        self._client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
-        self._model = config.ai_model
-        self._max_tokens = config.ai_max_tokens
+    def __init__(self, client, max_tokens: int = 4096, workspace_dir: Path | None = None) -> None:
+        self._client = client
+        self._max_tokens = max_tokens
         self._workspace_dir = workspace_dir
 
     async def generate_code(
@@ -61,8 +51,7 @@ class AICodeAssistant:
         p = _load_prompts()
         context = self._build_context(current_file, current_content, provider)
         system = p.get_generate_prompt(provider=provider, context=context)
-        user_msg = prompt
-        async for chunk in self._stream(system, user_msg, "generate_code"):
+        async for chunk in self._stream(system, prompt, "generate_code"):
             yield chunk
 
     async def explain_code(
@@ -102,27 +91,23 @@ class AICodeAssistant:
     ) -> str:
         """Return an inline completion suggestion for the cursor position (non-streaming)."""
         p = _load_prompts()
-        h = _load_helpers()
         system = p.get_complete_prompt()
         lines = code.splitlines()
-        # Provide only the code up to the cursor for completion context
         context_lines = lines[:cursor_line + 1]
         if context_lines and cursor_col < len(context_lines[-1]):
             context_lines[-1] = context_lines[-1][:cursor_col]
         partial = "\n".join(context_lines)
         user_msg = f"Complete this HCL at the cursor:\n```hcl\n{partial}\n```"
         try:
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=512,
+            response = await self._client.complete(
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
+                max_tokens=512,
             )
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during complete_code: %s", exc)
+        except LLMError as exc:
+            logger.error("LLM error during complete_code: %s", exc)
             return ""
-        h.log_usage(logger, "complete_code", response.usage)
-        return response.content[0].text.strip() if response.content else ""
+        return response.text.strip()
 
     async def chat(
         self,
@@ -135,18 +120,14 @@ class AICodeAssistant:
         context = self._build_context(current_file, current_content)
         system = p.get_chat_prompt(context=context)
         try:
-            async with self._client.messages.stream(
-                model=self._model,
-                max_tokens=self._max_tokens,
+            async for delta in self._client.stream(
                 system=system,
-                messages=messages,  # type: ignore[arg-type]
-            ) as stream:
-                async for delta in stream.text_stream:
-                    yield delta
-                final = await stream.get_final_message()
-                _load_helpers().log_usage(logger, "chat", final.usage)
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during chat: %s", exc)
+                messages=messages,
+                max_tokens=self._max_tokens,
+            ):
+                yield delta
+        except LLMError as exc:
+            logger.error("LLM error during chat: %s", exc)
             yield f"Error: {exc}"
 
     # -----------------------------------------------------------------------
@@ -183,16 +164,12 @@ class AICodeAssistant:
     ) -> AsyncGenerator[str, None]:
         """Internal streaming helper shared by generate/explain/fix."""
         try:
-            async with self._client.messages.stream(
-                model=self._model,
-                max_tokens=self._max_tokens,
+            async for delta in self._client.stream(
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
-            ) as stream:
-                async for delta in stream.text_stream:
-                    yield delta
-                final = await stream.get_final_message()
-                _load_helpers().log_usage(logger, operation, final.usage)
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during %s: %s", operation, exc)
+                max_tokens=self._max_tokens,
+            ):
+                yield delta
+        except LLMError as exc:
+            logger.error("LLM error during %s: %s", operation, exc)
             yield f"Error: {exc}"

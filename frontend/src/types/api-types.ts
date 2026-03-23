@@ -144,6 +144,29 @@ export interface APITokenCreated {
   token: string
 }
 
+// --- AI / LLM Config ---
+export interface AIConfigResponse {
+  provider: string
+  model: string
+  max_tokens: number
+  api_key_set: boolean
+  base_url: string
+}
+
+export interface AIConfigRequest {
+  provider: string
+  api_key?: string
+  model?: string
+  max_tokens?: number
+  base_url?: string
+}
+
+export interface AIProviderStatus {
+  name: string
+  configured: boolean
+  default_model: string
+}
+
 // --- Phase 3: VCS ---
 export interface VCSConnection {
   id: string

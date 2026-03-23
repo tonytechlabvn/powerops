@@ -57,8 +57,10 @@ def _workspace_path(workspace_id: str) -> _P:
 def _get_engine():
     from backend.core import load_kebab_module
     from backend.core.config import get_settings
+    from backend.core.llm import get_llm_client
     engine_mod = load_kebab_module("ai-remediation-engine.py", "ai_remediation_engine")
-    return engine_mod.AIRemediationEngine(config=get_settings())
+    cfg = get_settings()
+    return engine_mod.AIRemediationEngine(client=get_llm_client(cfg), max_tokens=cfg.ai_max_tokens)
 
 
 def _remediation_to_response(result, schemas):

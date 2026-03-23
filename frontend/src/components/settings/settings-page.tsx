@@ -1,18 +1,20 @@
-// Tabbed settings page: Organization, Teams, API Tokens
+// Tabbed settings page: Organization, Teams, API Tokens, AI Models
 
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, Shield, Key, Plus, Trash2, Copy, Check } from 'lucide-react'
+import { Users, Shield, Key, Plus, Trash2, Copy, Check, Cpu } from 'lucide-react'
 import { apiClient } from '../../services/api-client'
 import { cn, formatDate } from '../../lib/utils'
 import type { AuthUser, TeamInfo, OrgInfo, APITokenInfo, APITokenCreated } from '../../types/api-types'
+import { AISettingsTab } from './ai-settings-tab'
 
 // --- Tab definitions ---
-type Tab = 'org' | 'teams' | 'tokens'
+type Tab = 'org' | 'teams' | 'tokens' | 'ai'
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'org',    label: 'Organization', icon: <Users size={15} /> },
   { id: 'teams',  label: 'Teams',        icon: <Shield size={15} /> },
   { id: 'tokens', label: 'API Tokens',   icon: <Key size={15} /> },
+  { id: 'ai',     label: 'AI Models',    icon: <Cpu size={15} /> },
 ]
 
 // --- Sub-components ---
@@ -355,6 +357,7 @@ export function SettingsPage() {
         {activeTab === 'org'    && <OrgTab />}
         {activeTab === 'teams'  && <TeamsTab />}
         {activeTab === 'tokens' && <TokensTab />}
+        {activeTab === 'ai'     && <AISettingsTab />}
       </div>
     </div>
   )

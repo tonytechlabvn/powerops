@@ -1,6 +1,6 @@
 """AI-powered remediation engine for failed terraform plan/apply operations (Phase 10).
 
-Wraps AIAgent with automatic error classification, fix generation, and
+Wraps LLMClient with automatic error classification, fix generation, and
 one-click file patching. Never auto-applies — always returns diffs for user review.
 """
 from __future__ import annotations
@@ -8,9 +8,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import anthropic
-
-from backend.core.config import Settings
+from backend.core.llm import LLMError
 
 logger = logging.getLogger(__name__)
 
@@ -37,15 +35,13 @@ class AIRemediationEngine:
     """Diagnoses terraform failures and generates corrected HCL diffs.
 
     Args:
-        config: Application Settings instance.
+        client: An LLMClient instance.
+        max_tokens: Max tokens for completions.
     """
 
-    def __init__(self, config: Settings) -> None:
-        if not config.anthropic_api_key:
-            raise ValueError("TERRABOT_ANTHROPIC_API_KEY is not set.")
-        self._client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
-        self._model = config.ai_model
-        self._max_tokens = config.ai_max_tokens
+    def __init__(self, client, max_tokens: int = 4096) -> None:
+        self._client = client
+        self._max_tokens = max_tokens
 
     async def diagnose_and_fix(
         self,
@@ -80,7 +76,7 @@ class AIRemediationEngine:
         # Step 2: collect workspace HCL files as context
         file_contents = self._collect_hcl_files(workspace_dir)
 
-        # Step 3: call Claude for diagnosis + fix
+        # Step 3: call LLM for diagnosis + fix
         system = _prompts().get_prompt()
         hcl_context = "\n\n".join(
             f"--- {fp} ---\n{content}" for fp, content in file_contents.items()
@@ -91,23 +87,20 @@ class AIRemediationEngine:
         )
 
         try:
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
+            response = await self._client.complete(
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
+                max_tokens=self._max_tokens,
             )
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during diagnose_and_fix: %s", exc)
+        except LLMError as exc:
+            logger.error("LLM error during diagnose_and_fix: %s", exc)
             return h.RemediationResult(
                 error_category=error_category,
                 root_cause=str(exc),
                 is_fixable=False,
             )
 
-        ai_h.log_usage(logger, "diagnose_and_fix", response.usage)
-        text = response.content[0].text if response.content else ""
-
+        text = response.text
         root_cause = ai_h.extract_section(text, "Root Cause")
         explanation = ai_h.extract_section(text, "Explanation")
         fixed_hcl = ai_h.extract_hcl(text)
@@ -176,8 +169,6 @@ class AIRemediationEngine:
         h = _helpers()
         if not fixed_hcl:
             return []
-        # Heuristic: attribute fix to the first .tf file that appears to need it
-        # In a real scenario the prompt could include the target filename
         target_file = next(iter(originals), "main.tf")
         original = originals.get(target_file, "")
         diff = h.make_unified_diff(original, fixed_hcl, target_file)

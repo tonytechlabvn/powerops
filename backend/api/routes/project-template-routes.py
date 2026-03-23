@@ -158,7 +158,8 @@ async def wizard_message(body: _schemas.WizardMessageRequest, request: Request):
     _wizard_prompt = _load_core("prompts/project-wizard-prompt.py", "prompts.project_wizard_prompt")
 
     settings = get_settings()
-    agent = _ai_mod.AIAgent(config=settings)
+    from backend.core.llm import get_llm_client
+    llm_client = get_llm_client(settings)
 
     # Build message list: history + new user message
     messages = [{"role": m.role, "content": m.content} for m in body.history]
@@ -166,15 +167,12 @@ async def wizard_message(body: _schemas.WizardMessageRequest, request: Request):
 
     # Collect full response (non-streaming for wizard — we need the full text to extract YAML)
     try:
-        import anthropic
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
-            model=settings.ai_model,
-            max_tokens=settings.ai_max_tokens,
+        response = await llm_client.complete(
             system=_wizard_prompt.get_prompt(),
-            messages=messages,  # type: ignore[arg-type]
+            messages=messages,
+            max_tokens=settings.ai_max_tokens,
         )
-        full_text: str = response.content[0].text if response.content else ""
+        full_text: str = response.text
     except Exception as exc:
         logger.error("Wizard message error: %s", exc)
         raise HTTPException(status_code=502, detail=f"AI service error: {exc}")

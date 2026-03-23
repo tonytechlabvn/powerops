@@ -85,9 +85,12 @@ async def ai_generate(workspace_id: str, request: Request):
 
     from backend.core import load_kebab_module
     from backend.core.config import get_settings
+    from backend.core.llm import get_llm_client
     assistant_mod = load_kebab_module("ai-code-assistant.py", "ai_code_assistant")
+    cfg = get_settings()
     assistant = assistant_mod.AICodeAssistant(
-        config=get_settings(),
+        client=get_llm_client(cfg),
+        max_tokens=cfg.ai_max_tokens,
         workspace_dir=_workspace_path(workspace_id),
     )
     gen = assistant.generate_code(
@@ -108,8 +111,10 @@ async def ai_explain(workspace_id: str, request: Request):
 
     from backend.core import load_kebab_module
     from backend.core.config import get_settings
+    from backend.core.llm import get_llm_client
     assistant_mod = load_kebab_module("ai-code-assistant.py", "ai_code_assistant")
-    assistant = assistant_mod.AICodeAssistant(config=get_settings())
+    cfg = get_settings()
+    assistant = assistant_mod.AICodeAssistant(client=get_llm_client(cfg), max_tokens=cfg.ai_max_tokens)
     gen = assistant.explain_code(code=body.code, file_path=body.file_path)
     return _sse_response(gen)
 
@@ -123,8 +128,10 @@ async def ai_fix(workspace_id: str, request: Request):
 
     from backend.core import load_kebab_module
     from backend.core.config import get_settings
+    from backend.core.llm import get_llm_client
     assistant_mod = load_kebab_module("ai-code-assistant.py", "ai_code_assistant")
-    assistant = assistant_mod.AICodeAssistant(config=get_settings())
+    cfg = get_settings()
+    assistant = assistant_mod.AICodeAssistant(client=get_llm_client(cfg), max_tokens=cfg.ai_max_tokens)
     gen = assistant.suggest_fix(code=body.code, error=body.error, file_path=body.file_path)
     return _sse_response(gen)
 
@@ -138,8 +145,10 @@ async def ai_complete(workspace_id: str, request: Request):
 
     from backend.core import load_kebab_module
     from backend.core.config import get_settings
+    from backend.core.llm import get_llm_client
     assistant_mod = load_kebab_module("ai-code-assistant.py", "ai_code_assistant")
-    assistant = assistant_mod.AICodeAssistant(config=get_settings())
+    cfg = get_settings()
+    assistant = assistant_mod.AICodeAssistant(client=get_llm_client(cfg), max_tokens=cfg.ai_max_tokens)
     suggestion = await assistant.complete_code(
         code=body.code,
         cursor_line=body.cursor_line,
@@ -158,9 +167,12 @@ async def ai_chat(workspace_id: str, request: Request):
 
     from backend.core import load_kebab_module
     from backend.core.config import get_settings
+    from backend.core.llm import get_llm_client
     assistant_mod = load_kebab_module("ai-code-assistant.py", "ai_code_assistant")
+    cfg = get_settings()
     assistant = assistant_mod.AICodeAssistant(
-        config=get_settings(),
+        client=get_llm_client(cfg),
+        max_tokens=cfg.ai_max_tokens,
         workspace_dir=_workspace_path(workspace_id),
     )
     messages = [{"role": m.role, "content": m.content} for m in body.messages]

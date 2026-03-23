@@ -28,10 +28,17 @@ class Settings(BaseSettings):
     # Per-operation timeout in seconds (default: 30 minutes)
     op_timeout_seconds: int = 1800
 
-    # Anthropic API credentials
-    anthropic_api_key: str = ""
+    # --- AI / LLM provider ---
+    # Active provider: anthropic | openai | gemini | ollama
+    ai_provider: str = "anthropic"
     ai_model: str = "claude-sonnet-4-20250514"
     ai_max_tokens: int = 4096
+    # Per-provider API keys
+    anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
+    # Ollama local server URL with OpenAI-compatible /v1 path
+    ollama_base_url: str = "http://localhost:11434/v1"
 
     # --- Phase 1: State management ---
     # Base64-encoded 32-byte key for AES-256-GCM state encryption.

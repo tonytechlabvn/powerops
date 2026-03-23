@@ -188,7 +188,9 @@ class LabValidator:
                 mod = _sys.modules[_ai_name]
 
             from backend.core.config import get_settings
-            agent = mod.AIAgent(get_settings())
+            from backend.core.llm import get_llm_client
+            cfg = get_settings()
+            agent = mod.AIAgent(client=get_llm_client(cfg), max_tokens=cfg.ai_max_tokens)
 
             # Build review prompt
             prompt = (

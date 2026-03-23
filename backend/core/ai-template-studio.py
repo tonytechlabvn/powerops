@@ -11,9 +11,7 @@ import logging
 import re
 from pathlib import Path
 
-import anthropic
-
-from backend.core.config import Settings
+from backend.core.llm import LLMError
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +44,15 @@ class AITemplateStudio:
     """Generates Jinja2 template packages from NL descriptions or raw HCL.
 
     Args:
-        config: Application Settings instance.
+        client: An LLMClient instance.
+        template_dir: Root directory for saved templates.
+        max_tokens: Max tokens for completions.
     """
 
-    def __init__(self, config: Settings) -> None:
-        if not config.anthropic_api_key:
-            raise ValueError("TERRABOT_ANTHROPIC_API_KEY is not set.")
-        self._client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
-        self._model = config.ai_model
-        self._max_tokens = config.ai_max_tokens
-        self._template_dir = Path(config.template_dir)
+    def __init__(self, client, template_dir: Path, max_tokens: int = 4096) -> None:
+        self._client = client
+        self._max_tokens = max_tokens
+        self._template_dir = template_dir
 
     # ------------------------------------------------------------------
     # Generate: NL description → template package
@@ -80,18 +77,16 @@ class AITemplateStudio:
         user_msg = "\n".join(user_parts)
 
         try:
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
+            response = await self._client.complete(
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
+                max_tokens=self._max_tokens,
             )
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during generate_template: %s", exc)
+        except LLMError as exc:
+            logger.error("LLM error during generate_template: %s", exc)
             return h.GeneratedTemplate(name="error", providers=providers, description=str(exc))
 
-        ai_h.log_usage(logger, "generate_template", response.usage)
-        raw_text = response.content[0].text if response.content else ""
+        raw_text = response.text
         files = h.parse_template_files(raw_text)
         meta = _extract_metadata(files)
 
@@ -120,18 +115,16 @@ class AITemplateStudio:
             user_msg += f"\n\nTemplate name: {template_name}"
 
         try:
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
+            response = await self._client.complete(
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
+                max_tokens=self._max_tokens,
             )
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during extract_template: %s", exc)
+        except LLMError as exc:
+            logger.error("LLM error during extract_template: %s", exc)
             return h.GeneratedTemplate(name="error", providers=[], description=str(exc))
 
-        ai_h.log_usage(logger, "extract_template", response.usage)
-        raw_text = response.content[0].text if response.content else ""
+        raw_text = response.text
         files = h.parse_template_files(raw_text)
         meta = _extract_metadata(files)
         providers = [meta.get("provider", "aws")] if meta.get("provider") else ["aws"]
@@ -183,18 +176,16 @@ class AITemplateStudio:
         })
 
         try:
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
+            response = await self._client.complete(
                 system=system,
                 messages=messages,
+                max_tokens=self._max_tokens,
             )
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during refine_template: %s", exc)
+        except LLMError as exc:
+            logger.error("LLM error during refine_template: %s", exc)
             return current_template
 
-        ai_h.log_usage(logger, "refine_template", response.usage)
-        raw_text = response.content[0].text if response.content else ""
+        raw_text = response.text
         new_files = h.parse_template_files(raw_text)
         if not new_files:
             return current_template
@@ -223,18 +214,16 @@ class AITemplateStudio:
         system = _wizard_prompts().get_wizard_step_prompt()
 
         try:
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=2048,
+            response = await self._client.complete(
                 system=system,
                 messages=[{"role": "user", "content": description}],
+                max_tokens=2048,
             )
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during analyze_wizard_steps: %s", exc)
+        except LLMError as exc:
+            logger.error("LLM error during analyze_wizard_steps: %s", exc)
             return {"steps": ["provider", "review"], "defaults": {}, "reasoning": str(exc)}
 
-        ai_h.log_usage(logger, "analyze_wizard_steps", response.usage)
-        raw_text = response.content[0].text if response.content else ""
+        raw_text = response.text
 
         # Parse JSON from response
         try:

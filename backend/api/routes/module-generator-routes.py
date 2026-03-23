@@ -47,8 +47,10 @@ def _require_auth(request: Request) -> dict:
 def _get_generator():
     from backend.core import load_kebab_module
     from backend.core.config import get_settings
+    from backend.core.llm import get_llm_client
     gen_mod = load_kebab_module("ai-module-generator.py", "ai_module_generator")
-    return gen_mod.AIModuleGenerator(config=get_settings())
+    cfg = get_settings()
+    return gen_mod.AIModuleGenerator(client=get_llm_client(cfg), max_tokens=cfg.ai_max_tokens)
 
 
 def _module_to_response(module, validation, schemas):

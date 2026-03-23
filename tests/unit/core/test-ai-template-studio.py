@@ -149,27 +149,23 @@ class TestAITemplateStudio:
     """Test service methods with mocked Claude API."""
 
     @pytest.fixture
-    def mock_config(self, tmp_path):
-        from backend.core.config import Settings
-        return Settings(
-            anthropic_api_key="test-key-123",
-            ai_model="claude-test",
-            ai_max_tokens=4096,
-            template_dir=str(tmp_path / "templates"),
-        )
+    def mock_client(self):
+        """Create a mock LLMClient for testing."""
+        return MagicMock()
 
     @pytest.fixture
-    def studio(self, mock_config):
+    def studio(self, mock_client, tmp_path):
         studio_mod = _load_studio()
-        with patch("anthropic.AsyncAnthropic"):
-            return studio_mod.AITemplateStudio(config=mock_config)
+        return studio_mod.AITemplateStudio(
+            client=mock_client,
+            template_dir=tmp_path / "templates",
+            max_tokens=4096,
+        )
 
-    def _mock_claude_response(self, text: str):
-        """Create a mock Claude response with given text content."""
-        mock_resp = MagicMock()
-        mock_resp.content = [MagicMock(text=text)]
-        mock_resp.usage = MagicMock(input_tokens=100, output_tokens=200)
-        return mock_resp
+    def _mock_llm_response(self, text: str):
+        """Create a mock LLMResponse with given text content."""
+        from backend.core.llm import LLMResponse, LLMUsage
+        return LLMResponse(text=text, usage=LLMUsage(input_tokens=100, output_tokens=200))
 
     @pytest.mark.asyncio
     async def test_generate_template_returns_generated_template(self, studio):
@@ -178,7 +174,7 @@ class TestAITemplateStudio:
             '<file name="variables.json">{"variables": [{"name": "instance_type", "type": "string", "default": "t3.micro"}]}</file>\n'
             '<file name="metadata.json">{"name": "aws/ec2-web", "provider": "aws", "display_name": "EC2 Web Server"}</file>'
         )
-        studio._client.messages.create = AsyncMock(return_value=self._mock_claude_response(raw_response))
+        studio._client.complete = AsyncMock(return_value=self._mock_llm_response(raw_response))
 
         result = await studio.generate_template("Simple EC2 web server", ["aws"], "simple")
         assert result.providers == ["aws"]
@@ -192,7 +188,7 @@ class TestAITemplateStudio:
             '<file name="variables.json">{"variables": [{"name": "instance_type", "type": "string", "default": "t3.micro"}]}</file>\n'
             '<file name="metadata.json">{"name": "aws/extracted", "provider": "aws"}</file>'
         )
-        studio._client.messages.create = AsyncMock(return_value=self._mock_claude_response(raw_response))
+        studio._client.complete = AsyncMock(return_value=self._mock_llm_response(raw_response))
 
         hcl = 'resource "aws_instance" "web" { instance_type = "t3.micro" }'
         result = await studio.extract_template(hcl)
@@ -208,13 +204,13 @@ class TestAITemplateStudio:
             files={"main.tf.j2": "original content"},
         )
         raw_response = '<file name="main.tf.j2">refined content</file>'
-        studio._client.messages.create = AsyncMock(return_value=self._mock_claude_response(raw_response))
+        studio._client.complete = AsyncMock(return_value=self._mock_llm_response(raw_response))
 
         result = await studio.refine_template(current, "Add a VPC")
         assert result.name == "aws/original"
         assert "refined" in result.files.get("main.tf.j2", "")
 
-    def test_save_template_writes_files(self, studio, mock_config, tmp_path):
+    def test_save_template_writes_files(self, studio, tmp_path):
         h = _load_helpers()
         template = h.GeneratedTemplate(
             name="aws/test-save",
@@ -241,7 +237,7 @@ class TestAITemplateStudio:
         with pytest.raises(ValueError, match="path traversal"):
             studio.save_template(template)
 
-    def test_save_template_rejects_overwrite_by_default(self, studio, mock_config, tmp_path):
+    def test_save_template_rejects_overwrite_by_default(self, studio, tmp_path):
         h = _load_helpers()
         template = h.GeneratedTemplate(
             name="aws/no-overwrite",
@@ -253,7 +249,7 @@ class TestAITemplateStudio:
         with pytest.raises(ValueError, match="already exists"):
             studio.save_template(template)
 
-    def test_load_template_reads_files(self, studio, mock_config, tmp_path):
+    def test_load_template_reads_files(self, studio, tmp_path):
         h = _load_helpers()
         # Write files first
         template = h.GeneratedTemplate(

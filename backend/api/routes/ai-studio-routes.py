@@ -48,8 +48,15 @@ def _require_auth(request: Request) -> dict:
 def _get_studio():
     from backend.core import load_kebab_module
     from backend.core.config import get_settings
+    from backend.core.llm import get_llm_client
+    from pathlib import Path
     studio_mod = load_kebab_module("ai-template-studio.py", "ai_template_studio")
-    return studio_mod.AITemplateStudio(config=get_settings())
+    cfg = get_settings()
+    return studio_mod.AITemplateStudio(
+        client=get_llm_client(cfg),
+        template_dir=Path(cfg.template_dir),
+        max_tokens=cfg.ai_max_tokens,
+    )
 
 
 def _template_to_response(template, validation, schemas):

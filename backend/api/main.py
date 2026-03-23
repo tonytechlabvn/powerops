@@ -172,6 +172,11 @@ async def lifespan(app: FastAPI):
         _config_routes.load_persisted_config()
     except Exception as exc:
         logger.warning("Could not load provider config: %s", exc)
+    # Restore persisted AI/LLM provider configuration
+    try:
+        _config_routes.load_persisted_ai_config()
+    except Exception as exc:
+        logger.warning("Could not load AI config: %s", exc)
 
     # Phase 4: Seed starter policies on first boot + sync all to OPA
     try:

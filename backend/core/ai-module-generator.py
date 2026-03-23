@@ -8,9 +8,7 @@ from __future__ import annotations
 import logging
 from typing import AsyncGenerator
 
-import anthropic
-
-from backend.core.config import Settings
+from backend.core.llm import LLMError
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +32,13 @@ class AIModuleGenerator:
     """Generates complete Terraform modules from natural language descriptions.
 
     Args:
-        config: Application Settings instance.
+        client: An LLMClient instance.
+        max_tokens: Max tokens for completions.
     """
 
-    def __init__(self, config: Settings) -> None:
-        if not config.anthropic_api_key:
-            raise ValueError("TERRABOT_ANTHROPIC_API_KEY is not set.")
-        self._client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
-        self._model = config.ai_model
-        self._max_tokens = config.ai_max_tokens
+    def __init__(self, client, max_tokens: int = 4096) -> None:
+        self._client = client
+        self._max_tokens = max_tokens
 
     async def generate_module(
         self,
@@ -57,7 +53,6 @@ class AIModuleGenerator:
             GeneratedModule dataclass with files dict keyed by filename.
         """
         h = _helpers()
-        ai_h = _ai_helpers()
         system = _prompts().get_prompt(provider=provider)
 
         user_parts = [
@@ -68,18 +63,16 @@ class AIModuleGenerator:
         user_msg = "\n".join(user_parts)
 
         try:
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
+            response = await self._client.complete(
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
+                max_tokens=self._max_tokens,
             )
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during generate_module: %s", exc)
+        except LLMError as exc:
+            logger.error("LLM error during generate_module: %s", exc)
             return h.GeneratedModule(name="error", provider=provider, description=str(exc))
 
-        ai_h.log_usage(logger, "generate_module", response.usage)
-        raw_text = response.content[0].text if response.content else ""
+        raw_text = response.text
         files = h.parse_module_files(raw_text)
 
         module_name = _infer_module_name(description)
@@ -99,30 +92,25 @@ class AIModuleGenerator:
     ) -> AsyncGenerator:
         """Stream module generation progress, yielding ModuleGenerationEvent objects."""
         h = _helpers()
-        ai_h = _ai_helpers()
         system = _prompts().get_prompt(provider=provider)
         user_msg = f"Generate a {complexity} Terraform module for {provider}:\n\n{description}"
 
         accumulated = ""
         try:
-            async with self._client.messages.stream(
-                model=self._model,
-                max_tokens=self._max_tokens,
+            async for delta in self._client.stream(
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
-            ) as stream:
-                async for delta in stream.text_stream:
-                    accumulated += delta
-                    yield h.ModuleGenerationEvent(type="file_content", content=delta)
-                final = await stream.get_final_message()
-                ai_h.log_usage(logger, "generate_module_streaming", final.usage)
+                max_tokens=self._max_tokens,
+            ):
+                accumulated += delta
+                yield h.ModuleGenerationEvent(type="file_content", content=delta)
 
             files = h.parse_module_files(accumulated)
             for fname in files:
                 yield h.ModuleGenerationEvent(type="file_complete", file_name=fname)
             yield h.ModuleGenerationEvent(type="done")
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during generate_module_streaming: %s", exc)
+        except LLMError as exc:
+            logger.error("LLM error during generate_module_streaming: %s", exc)
             yield h.ModuleGenerationEvent(type="error", content=str(exc))
 
     async def refine_module(self, current_module, refinement: str):
@@ -136,7 +124,6 @@ class AIModuleGenerator:
             Updated GeneratedModule with revised files.
         """
         h = _helpers()
-        ai_h = _ai_helpers()
         system = _prompts().get_prompt(provider=current_module.provider)
 
         current_files_text = "\n\n".join(
@@ -149,18 +136,16 @@ class AIModuleGenerator:
         )
 
         try:
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
+            response = await self._client.complete(
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
+                max_tokens=self._max_tokens,
             )
-        except anthropic.APIError as exc:
-            logger.error("Claude API error during refine_module: %s", exc)
+        except LLMError as exc:
+            logger.error("LLM error during refine_module: %s", exc)
             return current_module
 
-        ai_h.log_usage(logger, "refine_module", response.usage)
-        raw_text = response.content[0].text if response.content else ""
+        raw_text = response.text
         new_files = h.parse_module_files(raw_text)
         if not new_files:
             return current_module
