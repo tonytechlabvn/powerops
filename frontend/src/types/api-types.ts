@@ -167,6 +167,12 @@ export interface AIProviderStatus {
   default_model: string
 }
 
+export interface AIModelInfo {
+  id: string
+  name: string
+  provider: string
+}
+
 // --- Phase 3: VCS ---
 export interface VCSConnection {
   id: string

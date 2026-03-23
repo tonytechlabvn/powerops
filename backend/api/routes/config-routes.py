@@ -15,6 +15,7 @@ from pathlib import Path
 
 from fastapi import APIRouter
 
+import httpx
 from pydantic import BaseModel
 
 from backend.api.schemas.request_schemas import ProviderConfigRequest
@@ -259,4 +260,130 @@ async def list_ai_providers() -> list[AIProviderStatus]:
             default_model=DEFAULT_MODELS.get(p, ""),
         )
         for p in SUPPORTED_PROVIDERS
+    ]
+
+
+class AIModelInfo(BaseModel):
+    """Single model entry returned by the models endpoint."""
+    id: str
+    name: str = ""
+    provider: str = ""
+
+
+@router.get("/ai/models")
+async def list_ai_models(provider: str = "") -> list[AIModelInfo]:
+    """Fetch available models from a provider's API.
+
+    If provider is empty, uses the currently active provider.
+    Requires the provider's API key to be configured.
+    Ollama fetches from the local server's /api/tags endpoint.
+    """
+    cfg = get_settings()
+    target = provider or cfg.ai_provider
+
+    if target not in SUPPORTED_PROVIDERS:
+        return []
+
+    key_map = {
+        "anthropic": cfg.anthropic_api_key,
+        "openai": cfg.openai_api_key,
+        "gemini": cfg.gemini_api_key,
+        "ollama": "",
+    }
+    api_key = key_map.get(target, "")
+
+    try:
+        if target == "anthropic":
+            return await _fetch_anthropic_models(api_key)
+        elif target == "openai":
+            return await _fetch_openai_models(api_key)
+        elif target == "gemini":
+            return await _fetch_gemini_models(api_key)
+        elif target == "ollama":
+            return await _fetch_ollama_models(cfg.ollama_base_url)
+    except Exception as exc:
+        logger.warning("Failed to fetch %s models: %s", target, exc)
+        return []
+
+    return []
+
+
+async def _fetch_anthropic_models(api_key: str) -> list[AIModelInfo]:
+    """Fetch models from Anthropic API."""
+    if not api_key:
+        return []
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            "https://api.anthropic.com/v1/models",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    models = data.get("data", [])
+    return [
+        AIModelInfo(id=m["id"], name=m.get("display_name", m["id"]), provider="anthropic")
+        for m in models
+    ]
+
+
+async def _fetch_openai_models(api_key: str) -> list[AIModelInfo]:
+    """Fetch models from OpenAI API, filtered to chat-capable models."""
+    if not api_key:
+        return []
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            "https://api.openai.com/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    # Filter to GPT/o-series chat models, skip embedding/whisper/dall-e/tts
+    skip_prefixes = ("text-", "dall-e", "whisper", "tts-", "babbage", "davinci", "embedding")
+    models = [
+        AIModelInfo(id=m["id"], name=m["id"], provider="openai")
+        for m in data.get("data", [])
+        if not m["id"].startswith(skip_prefixes)
+    ]
+    models.sort(key=lambda m: m.id)
+    return models
+
+
+async def _fetch_gemini_models(api_key: str) -> list[AIModelInfo]:
+    """Fetch models from Google Gemini API."""
+    if not api_key:
+        return []
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}",
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    # Filter to generative models that support generateContent
+    models = []
+    for m in data.get("models", []):
+        methods = m.get("supportedGenerationMethods", [])
+        if "generateContent" in methods:
+            model_id = m.get("name", "").replace("models/", "")
+            models.append(AIModelInfo(
+                id=model_id,
+                name=m.get("displayName", model_id),
+                provider="gemini",
+            ))
+    return models
+
+
+async def _fetch_ollama_models(base_url: str) -> list[AIModelInfo]:
+    """Fetch locally available models from Ollama server."""
+    # Strip /v1 suffix to get Ollama's native API
+    ollama_url = base_url.rstrip("/").removesuffix("/v1")
+    async with httpx.AsyncClient(timeout=5) as client:
+        resp = await client.get(f"{ollama_url}/api/tags")
+        resp.raise_for_status()
+        data = resp.json()
+    return [
+        AIModelInfo(id=m["name"], name=m["name"], provider="ollama")
+        for m in data.get("models", [])
     ]
