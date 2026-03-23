@@ -103,9 +103,9 @@ export function StudioCanvasPanel({ onGenerate, isGenerating }: StudioCanvasPane
   )
 
   return (
-    <div className="flex h-full" onKeyDown={handleKeyDown} tabIndex={0}>
+    <div className="flex w-full h-full" onKeyDown={handleKeyDown} tabIndex={0}>
       <ResourcePalette />
-      <div className="flex-1 bg-zinc-950">
+      <div className="flex-1 relative" style={{ minHeight: 0 }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}

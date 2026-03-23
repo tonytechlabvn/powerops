@@ -130,7 +130,7 @@ export function AIStudioPage() {
 
       {/* Canvas mode: full-width layout */}
       {mode === 'canvas' ? (
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
           <StudioCanvasPanel
             onGenerate={handleGenerate}
             isGenerating={state.status === 'generating'}
