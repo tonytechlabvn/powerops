@@ -4,6 +4,7 @@
 import { useCallback, useRef, type DragEvent } from 'react'
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
@@ -44,7 +45,16 @@ interface StudioCanvasPanelProps {
   isGenerating: boolean
 }
 
-export function StudioCanvasPanel({ onGenerate, isGenerating }: StudioCanvasPanelProps) {
+// Wrapper with ReactFlowProvider (required by @xyflow/react v12)
+export function StudioCanvasPanel(props: StudioCanvasPanelProps) {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner {...props} />
+    </ReactFlowProvider>
+  )
+}
+
+function CanvasInner({ onGenerate, isGenerating }: StudioCanvasPanelProps) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, toGraphJSON, removeSelected } =
     useCanvasStore()
   const reactFlowRef = useRef<ReactFlowInstance | null>(null)
