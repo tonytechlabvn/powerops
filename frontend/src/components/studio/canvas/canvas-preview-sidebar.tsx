@@ -1,6 +1,7 @@
 // Canvas preview sidebar — local preview computed from graph state (zero API cost).
 // Shows resource count, expected variables, connection warnings, and generate button.
 
+import { useMemo } from 'react'
 import { useCanvasStore } from '../../../stores/canvas-store'
 
 interface CanvasPreviewSidebarProps {
@@ -9,9 +10,14 @@ interface CanvasPreviewSidebarProps {
 }
 
 export function CanvasPreviewSidebar({ onGenerate, isGenerating }: CanvasPreviewSidebarProps) {
-  const preview = useCanvasStore(s => s.getPreview())
-  const nodeCount = useCanvasStore(s => s.nodes.length)
-  const edgeCount = useCanvasStore(s => s.edges.length)
+  const nodes = useCanvasStore(s => s.nodes)
+  const edges = useCanvasStore(s => s.edges)
+  const getPreview = useCanvasStore(s => s.getPreview)
+
+  // Derive preview from stable state — avoids infinite re-render from selector returning new object
+  const preview = useMemo(() => getPreview(), [nodes, edges, getPreview])
+  const nodeCount = nodes.length
+  const edgeCount = edges.length
 
   const hasResources = Object.keys(preview.resourceCount).length > 0
 
