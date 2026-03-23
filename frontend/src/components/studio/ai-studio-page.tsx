@@ -2,7 +2,7 @@
 // Modes: Creator (NL→template), Extractor (HCL→template), Wizard (Phase 4), Canvas (Phase 5).
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
 import { useTemplateStudio } from '../../hooks/use-template-studio'
 import { StudioCreatorPanel } from './studio-creator-panel'
 import { StudioExtractorPanel } from './studio-extractor-panel'
@@ -23,9 +23,11 @@ export function AIStudioPage() {
   const [editedFiles, setEditedFiles] = useState<Record<string, string>>({})
   const { state, generate, extract, refine, validate, save, load, reset } = useTemplateStudio()
   const params = useParams()
+  const location = useLocation()
 
-  // Load template for re-editing if navigated to /studio/edit/{name}
-  const editName = params['*']
+  // Load template for re-editing only when navigated to /studio/edit/{name}
+  const isEditRoute = location.pathname.startsWith('/studio/edit/')
+  const editName = isEditRoute ? params['*'] : undefined
   useEffect(() => {
     if (editName) {
       load(editName)
