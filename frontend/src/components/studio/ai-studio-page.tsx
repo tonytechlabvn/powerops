@@ -1,15 +1,41 @@
 // AI Studio page — unified template creation hub with mode selector.
 // Modes: Creator (NL→template), Extractor (HCL→template), Wizard (Phase 4), Canvas (Phase 5).
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Component, type ReactNode, type ErrorInfo, lazy, Suspense } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { useTemplateStudio } from '../../hooks/use-template-studio'
 import { StudioCreatorPanel } from './studio-creator-panel'
 import { StudioExtractorPanel } from './studio-extractor-panel'
 import { StudioFilePreview } from './studio-file-preview'
 import { StudioWizardPanel } from './wizard/studio-wizard-panel'
-import { StudioCanvasPanel } from './canvas/studio-canvas-panel'
 import type { StudioMode, StudioValidation } from '../../types/studio-types'
+
+// Lazy-load canvas to isolate @xyflow/react from the main bundle
+const StudioCanvasPanel = lazy(() =>
+  import('./canvas/studio-canvas-panel').then(m => ({ default: m.StudioCanvasPanel }))
+)
+
+// Error boundary to catch canvas runtime crashes
+class CanvasErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('Canvas crash:', error, info) }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex items-center justify-center h-full bg-zinc-950 text-zinc-300 p-8">
+          <div className="text-center max-w-md">
+            <p className="text-red-400 font-semibold mb-2">Canvas failed to load</p>
+            <pre className="text-xs text-zinc-500 whitespace-pre-wrap break-all">{this.state.error.message}</pre>
+            <button onClick={() => this.setState({ error: null })}
+              className="mt-4 px-4 py-2 bg-zinc-800 rounded hover:bg-zinc-700 text-sm">Retry</button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const MODES: { id: StudioMode; label: string }[] = [
   { id: 'creator', label: 'Creator' },
@@ -131,10 +157,14 @@ export function AIStudioPage() {
       {/* Canvas mode: full-width layout */}
       {mode === 'canvas' ? (
         <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
-          <StudioCanvasPanel
-            onGenerate={handleGenerate}
-            isGenerating={state.status === 'generating'}
-          />
+          <CanvasErrorBoundary>
+            <Suspense fallback={<div className="flex items-center justify-center h-full bg-zinc-950 text-zinc-500">Loading canvas...</div>}>
+              <StudioCanvasPanel
+                onGenerate={handleGenerate}
+                isGenerating={state.status === 'generating'}
+              />
+            </Suspense>
+          </CanvasErrorBoundary>
           {/* Show file preview overlay when template generated from canvas */}
           {state.template && Object.keys(currentFiles).length > 0 && (
             <div className="absolute inset-x-0 bottom-0 h-1/2 bg-zinc-950 border-t border-zinc-700 p-5 overflow-auto z-10">
