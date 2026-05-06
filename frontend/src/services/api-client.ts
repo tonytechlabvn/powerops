@@ -4,9 +4,9 @@ import type { ApiError } from '../types/api-types'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
-// In-memory token store (not localStorage — XSS protection)
+// In-memory access token (not localStorage — XSS protection).
+// Refresh token lives in the httpOnly `tb_refresh` cookie set by the backend.
 let _accessToken: string | null = null
-let _refreshToken: string | null = null
 let _refreshPromise: Promise<boolean> | null = null
 
 export function setAccessToken(token: string | null) {
@@ -15,14 +15,6 @@ export function setAccessToken(token: string | null) {
 
 export function getAccessToken(): string | null {
   return _accessToken
-}
-
-export function setRefreshToken(token: string | null) {
-  _refreshToken = token
-}
-
-export function getRefreshToken(): string | null {
-  return _refreshToken
 }
 
 class ApiClientError extends Error {
@@ -73,20 +65,18 @@ function buildUrl(path: string, params?: Record<string, string | undefined>): st
   return url.toString()
 }
 
-// Attempt to refresh the access token using the stored refresh token
+// Attempt to refresh the access token using the httpOnly refresh cookie.
+// Backend reads `tb_refresh` from cookies; no body needed.
 async function attemptRefresh(): Promise<boolean> {
-  if (!_refreshToken) return false
   try {
     const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ refresh_token: _refreshToken }),
     })
     if (!res.ok) return false
     const data = await res.json()
     _accessToken = data.access_token
-    if (data.refresh_token) _refreshToken = data.refresh_token
     return true
   } catch {
     return false
@@ -103,13 +93,13 @@ function refreshOnce(): Promise<boolean> {
   return _refreshPromise
 }
 
-// Fetch with automatic 401 retry after token refresh
+// Fetch with automatic 401 retry after silent refresh via cookie.
+// Skips retry for the refresh endpoint itself to avoid recursion.
 async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
-  if (res.status === 401 && _refreshToken) {
+  if (res.status === 401 && !url.includes('/api/auth/refresh')) {
     const refreshed = await refreshOnce()
     if (refreshed) {
-      // Retry with new token
       const retryInit = { ...init, headers: authHeaders() }
       return fetch(url, retryInit)
     }
