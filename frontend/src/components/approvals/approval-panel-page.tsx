@@ -148,22 +148,36 @@ export function ApprovalPanelPage() {
 
       {/* Pending section */}
       {pending.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-yellow-400 uppercase tracking-wider">
-            Pending ({pending.length})
-          </h2>
-          {pending.map(a => <ApprovalRow key={a.id} approval={a} />)}
-        </div>
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
+              Pending
+            </h2>
+            <span className="inline-flex items-center text-[11px] font-mono font-medium text-amber-400 bg-amber-500/10 ring-1 ring-inset ring-amber-500/20 px-2 py-0.5 rounded">
+              {pending.length} awaiting
+            </span>
+          </div>
+          <div className="space-y-2">
+            {pending.map(a => <ApprovalRow key={a.id} approval={a} />)}
+          </div>
+        </section>
       )}
 
       {/* Decided section */}
       {decided.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">
-            History ({decided.length})
-          </h2>
-          {decided.map(a => <ApprovalRow key={a.id} approval={a} />)}
-        </div>
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+              History
+            </h2>
+            <span className="inline-flex items-center text-[11px] font-mono font-medium text-zinc-400 bg-zinc-800/60 ring-1 ring-inset ring-zinc-700/50 px-2 py-0.5 rounded">
+              {decided.length} decided
+            </span>
+          </div>
+          <div className="space-y-2">
+            {decided.map(a => <ApprovalRow key={a.id} approval={a} />)}
+          </div>
+        </section>
       )}
 
       {!isLoading && (approvals ?? []).length === 0 && !error && (

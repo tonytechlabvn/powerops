@@ -83,39 +83,51 @@ function VersionsTable({ ws }: { ws: string }) {
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900 overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-        <p className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Database size={15} className="text-zinc-400" /> State Versions</p>
-        <button onClick={() => void qc.invalidateQueries({ queryKey: ['state', ws, 'versions'] })} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Database size={15} className="text-zinc-400" />
+            <p className="text-sm font-medium text-zinc-100">State Versions</p>
+          </div>
+          {versions.length > 0 && (
+            <span className="inline-flex items-center text-[11px] font-mono font-medium text-zinc-300 bg-zinc-800/60 ring-1 ring-inset ring-zinc-700/50 px-2 py-0.5 rounded">
+              {versions.length} TRACKED
+            </span>
+          )}
+        </div>
+        <button onClick={() => void qc.invalidateQueries({ queryKey: ['state', ws, 'versions'] })} className="text-zinc-500 hover:text-zinc-200 transition-colors">
           <RefreshCw size={14} />
         </button>
       </div>
 
-      {isLoading ? <div className="flex items-center gap-2 px-5 py-6 text-sm text-zinc-500"><Loader2 size={14} className="animate-spin" /> Loading…</div>
-        : error ? <p className="px-5 py-6 text-sm text-red-400">Failed to load versions.</p>
-        : versions.length === 0 ? <p className="px-5 py-6 text-sm text-zinc-500">No state versions yet</p>
+      {isLoading ? <div className="flex items-center gap-2 px-6 py-6 text-sm text-zinc-500"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+        : error ? <p className="px-6 py-6 text-sm text-red-400">Failed to load versions.</p>
+        : versions.length === 0 ? <p className="px-6 py-6 text-sm text-zinc-500">No state versions yet</p>
         : (
         <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-zinc-800 text-xs text-zinc-500 uppercase tracking-wide">
-              {['Serial', 'Checksum', 'Created At', 'Created By', ''].map(h => <th key={h} className="px-5 py-3 text-left font-medium">{h}</th>)}
+          <thead className="bg-zinc-900">
+            <tr className="border-b border-zinc-800">
+              {['Serial', 'Checksum', 'Created At', 'Created By', ''].map(h => (
+                <th key={h} className="px-6 py-2.5 text-xs font-medium uppercase tracking-wide text-zinc-400 text-left">{h}</th>
+              ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-zinc-800">
             {versions.map(v => (
-              <tr key={v.id} className="border-b border-zinc-800/60 hover:bg-zinc-800/30 transition-colors">
-                <td className="px-5 py-3 text-zinc-100 font-mono">#{v.serial}</td>
-                <td className="px-5 py-3 text-zinc-400 font-mono">{v.checksum.slice(0, 12)}…</td>
-                <td className="px-5 py-3 text-zinc-300">{formatDate(v.created_at)}</td>
-                <td className="px-5 py-3 text-zinc-400">{v.created_by}</td>
-                <td className="px-5 py-3 text-right">
+              <tr key={v.id} className="hover:bg-zinc-800/40 transition-colors duration-100">
+                <td className="px-6 py-2.5 text-zinc-100 font-mono">#{v.serial}</td>
+                <td className="px-6 py-2.5 text-zinc-400 font-mono text-xs">{v.checksum.slice(0, 12)}…</td>
+                <td className="px-6 py-2.5 text-zinc-300">{formatDate(v.created_at)}</td>
+                <td className="px-6 py-2.5 text-zinc-400">{v.created_by}</td>
+                <td className="px-6 py-2.5 text-right">
                   {confirmSerial === v.serial ? (
                     <span className="inline-flex items-center gap-2">
                       <span className="text-xs text-zinc-400">Confirm?</span>
                       <button onClick={() => rollback.mutate(v.serial)} disabled={rollback.isPending}
-                        className="text-xs bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded">
+                        className="text-xs bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded transition-colors">
                         {rollback.isPending ? <Loader2 size={10} className="animate-spin inline" /> : 'Yes'}
                       </button>
-                      <button onClick={() => setConfirm(null)} className="text-xs text-zinc-500 hover:text-zinc-300">Cancel</button>
+                      <button onClick={() => setConfirm(null)} className="text-xs text-zinc-500 hover:text-zinc-200">Cancel</button>
                     </span>
                   ) : (
                     <button onClick={() => setConfirm(v.serial)}

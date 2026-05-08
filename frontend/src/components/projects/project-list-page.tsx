@@ -50,10 +50,17 @@ export function ProjectListPage() {
           <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Projects</h1>
           <p className="text-zinc-400 text-sm mt-1">Multi-provider infrastructure projects</p>
         </div>
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus size={16} />
-          New Project
-        </Button>
+        <div className="flex items-center gap-3">
+          {projects.length > 0 && (
+            <span className="inline-flex items-center text-[11px] font-mono font-medium text-zinc-300 bg-zinc-800/60 ring-1 ring-inset ring-zinc-700/50 px-2 py-0.5 rounded">
+              {filtered.length}{search ? ` / ${projects.length}` : ''} TOTAL
+            </span>
+          )}
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus size={16} />
+            New Project
+          </Button>
+        </div>
       </div>
 
       {/* Search */}

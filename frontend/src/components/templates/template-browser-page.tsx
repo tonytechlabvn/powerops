@@ -75,34 +75,39 @@ function TemplateBrowserGrid() {
         {isLoading && <Loader2 size={16} className="animate-spin text-zinc-500" />}
       </div>
 
-      {/* Provider filter pills */}
+      {/* Provider filter pills (Stitch trend-pill style: mono font + ring) */}
       {providers.length > 1 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">Filter</span>
           <button
             onClick={() => setProvider(undefined)}
             className={cn(
-              'text-xs px-3 py-1 rounded-full border transition-colors duration-150',
+              'text-[11px] font-mono font-medium px-2 py-0.5 rounded ring-1 ring-inset transition-colors duration-150',
               !provider
-                ? 'bg-blue-500 border-blue-500 text-white'
-                : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                ? 'bg-blue-500/15 text-blue-400 ring-blue-500/30'
+                : 'bg-zinc-800/60 text-zinc-400 ring-zinc-700/50 hover:text-zinc-100',
             )}
           >
-            All
+            ALL · {allTemplates.length}
           </button>
-          {providers.map(p => (
-            <button
-              key={p}
-              onClick={() => setProvider(p)}
-              className={cn(
-                'text-xs px-3 py-1 rounded-full border transition-colors duration-150',
-                provider === p
-                  ? 'bg-blue-500 border-blue-500 text-white'
-                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
-              )}
-            >
-              {p}
-            </button>
-          ))}
+          {providers.map(p => {
+            const count = allTemplates.filter(t => t.provider === p).length
+            const active = provider === p
+            return (
+              <button
+                key={p}
+                onClick={() => setProvider(p)}
+                className={cn(
+                  'text-[11px] font-mono font-medium px-2 py-0.5 rounded ring-1 ring-inset transition-colors duration-150 uppercase',
+                  active
+                    ? 'bg-blue-500/15 text-blue-400 ring-blue-500/30'
+                    : 'bg-zinc-800/60 text-zinc-400 ring-zinc-700/50 hover:text-zinc-100',
+                )}
+              >
+                {p} · {count}
+              </button>
+            )
+          })}
         </div>
       )}
 

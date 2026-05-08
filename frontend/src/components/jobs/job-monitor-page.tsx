@@ -11,7 +11,7 @@ import { formatDate } from '../../lib/utils'
 import type { Job } from '../../types/api-types'
 import { Badge, type BadgeProps } from '../_design-system/badge'
 import { Button } from '../_design-system/button'
-import { Card, CardBody } from '../_design-system/card'
+import { Card, CardHeader, CardBody } from '../_design-system/card'
 
 const jobStatusIntent: Record<Job['status'], NonNullable<BadgeProps['intent']>> = {
   running: 'primary',
@@ -163,6 +163,8 @@ function JobDetailView({ id }: { id: string }) {
 function JobListView() {
   const [showHidden, setShowHidden] = useState(false)
   const { data: jobs, isLoading } = useJobs(undefined, showHidden)
+  const total = (jobs ?? []).length
+  const running = (jobs ?? []).filter(j => j.status === 'running').length
 
   return (
     <div className="space-y-6">
@@ -172,12 +174,17 @@ function JobListView() {
           <p className="text-sm text-zinc-400 mt-1">Terraform job history and live monitoring</p>
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer select-none">
+          {running > 0 && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono font-medium text-emerald-400 bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/20 px-2 py-0.5 rounded">
+              {running} LIVE
+            </span>
+          )}
+          <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showHidden}
               onChange={(e) => setShowHidden(e.target.checked)}
-              className="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500/30"
+              className="rounded border-zinc-700 bg-zinc-800 text-blue-500 focus:ring-blue-500/30"
             />
             Show hidden
           </label>
@@ -185,7 +192,15 @@ function JobListView() {
         </div>
       </div>
 
-      <JobHistoryTable jobs={jobs ?? []} />
+      <Card>
+        <CardHeader
+          title="Job History"
+          subtitle={total > 0 ? `${total} total ${showHidden ? '(incl. hidden)' : ''}` : undefined}
+        />
+        <CardBody className="p-0">
+          <JobHistoryTable jobs={jobs ?? []} />
+        </CardBody>
+      </Card>
     </div>
   )
 }
