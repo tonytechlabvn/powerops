@@ -1,7 +1,7 @@
 // Sidebar with 5 grouped sections: Operate / Build / Library / Learn / Admin.
 // Locked decision per plans/260508-2120-powerops-ui-full-redesign/plan.md.
 
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import {
   LayoutDashboard,
   FileCode2,
@@ -19,6 +19,7 @@ import {
   Bot,
   GraduationCap,
   GitBranch,
+  Plus,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '../_design-system/lib/cn'
@@ -82,6 +83,17 @@ export function Sidebar() {
       <div className="flex items-center gap-2 px-4 h-14 border-b border-zinc-800 shrink-0">
         <div className="h-6 w-6 rounded bg-blue-500 flex items-center justify-center text-white text-xs font-bold">P</div>
         <span className="text-zinc-100 font-semibold text-sm tracking-tight">PowerOps</span>
+      </div>
+
+      {/* Primary CTA */}
+      <div className="px-3 pt-3 shrink-0">
+        <Link
+          to="/projects"
+          className="w-full inline-flex items-center justify-center gap-2 h-9 px-4 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors duration-150 shadow-sm shadow-blue-500/10"
+        >
+          <Plus size={16} />
+          New Project
+        </Link>
       </div>
 
       {/* Grouped nav */}
