@@ -143,8 +143,8 @@ export function StatePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">State</h1>
-          <p className="text-sm text-zinc-500 mt-1">Manage Terraform state versions and locks</p>
+          <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">State</h1>
+          <p className="text-sm text-zinc-400 mt-1">Manage Terraform state versions and locks</p>
         </div>
         <div className="flex items-center gap-2">
           {wsLoading && <Loader2 size={14} className="animate-spin text-zinc-500" />}

@@ -99,6 +99,7 @@ export function ActivityFeed({ projectId }: Props) {
 
   useEffect(() => {
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-projectId-change pattern; safe here because deps array gates the effect
     setLoading(true)
     setError(null)
     apiClient

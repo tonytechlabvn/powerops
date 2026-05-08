@@ -120,8 +120,8 @@ export function AIStudioPage() {
       {/* Header */}
       <div className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">AI Studio</h1>
-          <p className="text-zinc-500 text-sm mt-0.5">
+          <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">AI Studio</h1>
+          <p className="text-zinc-400 text-sm mt-1">
             Create Jinja2 template packages from descriptions, HCL code, or visual canvas.
           </p>
         </div>

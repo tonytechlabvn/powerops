@@ -134,8 +134,8 @@ export function ApprovalPanelPage() {
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">Approvals</h1>
-          <p className="text-sm text-zinc-500 mt-1">Review and approve Terraform apply plans</p>
+          <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Approvals</h1>
+          <p className="text-sm text-zinc-400 mt-1">Review and approve Terraform apply plans</p>
         </div>
         {isLoading && <Loader2 size={16} className="animate-spin text-zinc-500" />}
       </div>

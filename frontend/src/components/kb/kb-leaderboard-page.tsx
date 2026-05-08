@@ -24,7 +24,7 @@ export function KBLeaderboardPage() {
             <ArrowLeft size={20} />
           </Link>
           <Trophy size={24} className="text-yellow-400" />
-          <h1 className="text-2xl font-bold text-zinc-100">Leaderboard</h1>
+          <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Leaderboard</h1>
         </div>
 
         {/* Scope tabs */}

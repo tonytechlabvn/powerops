@@ -38,6 +38,7 @@ export function useSSEStream(jobId: string | null): SSEStreamState {
 
   useEffect(() => {
     if (!jobId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stream state when job is cleared
       setLines([])
       setStatus('idle')
       setError(null)

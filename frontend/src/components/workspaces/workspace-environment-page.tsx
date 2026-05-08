@@ -6,6 +6,10 @@ import { Plus, RefreshCw, Link2 } from 'lucide-react'
 import { useEnvironments, useCreateEnvironment } from '../../hooks/use-environments'
 import { EnvironmentPipelineCard } from './environment-pipeline-card'
 import type { Environment } from '../../types/api-types'
+import { Button } from '../_design-system/button'
+import { Card, CardHeader, CardBody } from '../_design-system/card'
+import { Input } from '../_design-system/input'
+import { EmptyState } from '../_design-system/empty-state'
 
 // Hardcoded org_id — in production this comes from auth context / org switcher
 const ORG_ID = 'default-org'
@@ -30,60 +34,46 @@ function CreateEnvironmentDialog({ orgId, onClose }: CreateDialogProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md p-6 shadow-2xl">
-        <h2 className="text-lg font-semibold text-zinc-100 mb-4">Create Environment</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs text-zinc-400 mb-1">Name</label>
-            <input
-              value={name} onChange={e => setName(e.target.value)} required
-              placeholder="dev / staging / prod"
-              className="w-full px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm focus:outline-none focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-zinc-400 mb-1">Description</label>
-            <input
-              value={description} onChange={e => setDescription(e.target.value)}
-              placeholder="Optional description"
-              className="w-full px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm focus:outline-none focus:border-blue-500"
-            />
-          </div>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block text-xs text-zinc-400 mb-1">Color</label>
-              <input type="color" value={color} onChange={e => setColor(e.target.value)}
-                className="h-9 w-full rounded-md bg-zinc-800 border border-zinc-700 cursor-pointer"
-              />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <Card className="w-full max-w-md shadow-2xl">
+        <CardHeader title="Create Environment" />
+        <CardBody>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5">Name</label>
+              <Input value={name} onChange={e => setName(e.target.value)} required placeholder="dev / staging / prod" />
             </div>
-            <div className="flex items-end gap-4 pb-0.5">
-              <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                <input type="checkbox" checked={autoApply} onChange={e => setAutoApply(e.target.checked)}
-                  className="accent-blue-500"
-                />
-                Auto-apply
-              </label>
-              <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                <input type="checkbox" checked={isProtected} onChange={e => setIsProtected(e.target.checked)}
-                  className="accent-amber-500"
-                />
-                Protected
-              </label>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5">Description</label>
+              <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional description" />
             </div>
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-sm rounded-md text-zinc-400 hover:text-zinc-100 transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={create.isPending || !name.trim()}
-              className="px-4 py-2 text-sm rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50 transition-colors">
-              {create.isPending ? 'Creating...' : 'Create'}
-            </button>
-          </div>
-        </form>
-      </div>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Color</label>
+                <input type="color" value={color} onChange={e => setColor(e.target.value)}
+                  className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-900 cursor-pointer"
+                />
+              </div>
+              <div className="flex items-end gap-4 pb-0.5">
+                <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+                  <input type="checkbox" checked={autoApply} onChange={e => setAutoApply(e.target.checked)} className="accent-blue-500" />
+                  Auto-apply
+                </label>
+                <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+                  <input type="checkbox" checked={isProtected} onChange={e => setIsProtected(e.target.checked)} className="accent-amber-500" />
+                  Protected
+                </label>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button intent="ghost" type="button" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={create.isPending || !name.trim()}>
+                {create.isPending ? 'Creating...' : 'Create'}
+              </Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
     </div>
   )
 }
@@ -120,38 +110,32 @@ export function WorkspaceEnvironmentPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Environments</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">
+          <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Environments</h1>
+          <p className="text-sm text-zinc-400 mt-1">
             Organize workspaces into promotion pipelines (dev → staging → prod)
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => refetch()}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors">
-            <RefreshCw size={14} />
-            Refresh
-          </button>
-          <button onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors">
-            <Plus size={14} />
-            New Environment
-          </button>
+          <Button intent="secondary" size="sm" onClick={() => refetch()}>
+            <RefreshCw size={14} /> Refresh
+          </Button>
+          <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Plus size={14} /> New Environment
+          </Button>
         </div>
       </div>
 
       {/* Pipeline visual */}
       {environments.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-zinc-600">
-          <p className="text-sm mb-2">No environments yet</p>
-          <button onClick={() => setShowCreate(true)}
-            className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
-            Create your first environment
-          </button>
-        </div>
+        <EmptyState
+          title="No environments yet"
+          description="Create your first environment to start organizing promotion pipelines."
+          action={<Button onClick={() => setShowCreate(true)}><Plus size={16} />New Environment</Button>}
+        />
       ) : (
         <div className="flex items-start gap-0 overflow-x-auto pb-2">
           {environments.map((env, idx) => (
@@ -168,15 +152,19 @@ export function WorkspaceEnvironmentPage() {
 
       {/* Detail panel for selected environment */}
       {selectedEnv && (
-        <div className="border border-zinc-800 rounded-lg bg-zinc-900 p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: selectedEnv.color }} />
-              {selectedEnv.name} — Workspaces
-            </h2>
-          </div>
-          <EnvironmentWorkspaceList environment={selectedEnv} />
-        </div>
+        <Card>
+          <CardHeader
+            title={
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: selectedEnv.color }} />
+                {selectedEnv.name} <span className="text-zinc-500 font-normal">— Workspaces</span>
+              </span>
+            }
+          />
+          <CardBody>
+            <EnvironmentWorkspaceList environment={selectedEnv} />
+          </CardBody>
+        </Card>
       )}
 
       {showCreate && (

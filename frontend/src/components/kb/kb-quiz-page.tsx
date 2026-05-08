@@ -61,7 +61,7 @@ export function KBQuizPage() {
 
       {/* Header */}
       <div className="space-y-1">
-        <h1 className="text-xl font-bold text-zinc-100">Chapter Quiz</h1>
+        <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Chapter Quiz</h1>
         <p className="text-zinc-400 text-sm">
           {questions.length} questions — passing score {PASSING_SCORE}%
         </p>

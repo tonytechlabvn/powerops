@@ -41,7 +41,7 @@ export function StackComposerPage() {
 
   function buildDefinition(): StackDefinition {
     return {
-      modules: modules.map(({ _key: _, ...m }) => m),
+      modules: modules.map(({ _key, ...m }) => { void _key; return m }),
     }
   }
 
@@ -79,12 +79,12 @@ export function StackComposerPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-100 flex items-center gap-2">
-          <Layers size={20} className="text-blue-400" /> Stack Composer
+        <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight flex items-center gap-2">
+          <Layers size={22} className="text-blue-400" /> Stack Composer
         </h1>
-        <p className="text-sm text-zinc-400 mt-0.5">
+        <p className="text-sm text-zinc-400 mt-1">
           Compose registry modules into a deployable Terraform stack
         </p>
       </div>

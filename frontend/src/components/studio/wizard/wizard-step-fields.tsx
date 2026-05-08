@@ -1,5 +1,6 @@
 // Shared field renderer for wizard step components.
 // Each step defines a list of fields; this renders them consistently.
+/* eslint-disable react-refresh/only-export-components -- field constants colocated with renderer for ergonomics */
 
 interface FieldDef {
   name: string

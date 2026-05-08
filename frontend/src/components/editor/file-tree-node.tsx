@@ -97,6 +97,7 @@ interface FlatFile {
   is_directory: boolean
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function buildFileTree(files: FlatFile[]): TreeNode[] {
   const root: TreeNode[] = []
   const dirs = new Map<string, TreeNode>()

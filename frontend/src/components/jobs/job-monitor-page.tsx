@@ -7,7 +7,19 @@ import { useJobs, useJob, useDestroyMutation, useHideJobMutation } from '../../h
 import { JobOutputStream } from './job-output-stream'
 import { JobHistoryTable } from './job-history-table'
 import { JobOutputSummary } from './job-output-summary'
-import { statusColor, formatDate } from '../../lib/utils'
+import { formatDate } from '../../lib/utils'
+import type { Job } from '../../types/api-types'
+import { Badge, type BadgeProps } from '../_design-system/badge'
+import { Button } from '../_design-system/button'
+import { Card, CardBody } from '../_design-system/card'
+
+const jobStatusIntent: Record<Job['status'], NonNullable<BadgeProps['intent']>> = {
+  running: 'primary',
+  completed: 'success',
+  failed: 'danger',
+  pending: 'warning',
+  cancelled: 'neutral',
+}
 
 // --- Individual job detail view ---
 function JobDetailView({ id }: { id: string }) {
@@ -53,74 +65,64 @@ function JobDetailView({ id }: { id: string }) {
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link to="/jobs" className="text-zinc-500 hover:text-zinc-300">
+      <div className="flex items-start gap-3">
+        <Link to="/jobs" className="text-zinc-500 hover:text-zinc-200 mt-1">
           <ChevronLeft size={20} />
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-zinc-100 truncate">{job.workspace}</h1>
-          <div className="flex flex-wrap items-center gap-2 mt-1">
-            <span className={`text-xs px-2 py-0.5 rounded border ${statusColor(job.status)}`}>
-              {job.status}
-            </span>
-            <span className="text-xs text-zinc-500 capitalize">{job.type}</span>
+          <h1 className="text-2xl font-semibold text-zinc-100 truncate tracking-tight">{job.workspace}</h1>
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <Badge intent={jobStatusIntent[job.status] ?? 'neutral'}>{job.status}</Badge>
+            <span className="text-xs text-zinc-400 capitalize">{job.type}</span>
             <span className="text-xs text-zinc-600 font-mono">{job.id.slice(0, 12)}…</span>
             <span className="text-xs text-zinc-500">{formatDate(job.created_at)}</span>
           </div>
         </div>
         {canHide && (
-          <button
+          <Button
+            intent="secondary"
+            size="sm"
             onClick={() => hideMutation.mutate(job!.id, { onSuccess: () => navigate('/jobs') })}
             disabled={hideMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50 transition-colors"
           >
             {hideMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <EyeOff size={14} />}
             Hide
-          </button>
+          </Button>
         )}
         {canDestroy && (
-          <button
-            onClick={() => setShowDestroyConfirm(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors"
-          >
+          <Button intent="danger" size="sm" onClick={() => setShowDestroyConfirm(true)}>
             <Trash2 size={14} />
             Destroy
-          </button>
+          </Button>
         )}
       </div>
 
       {/* Destroy confirmation */}
       {showDestroyConfirm && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 space-y-3">
-          <p className="text-sm text-red-300 font-medium">
-            Are you sure you want to destroy all resources in <span className="font-mono">{job.workspace}</span>?
-          </p>
-          <p className="text-xs text-zinc-400">
-            This will permanently destroy all infrastructure managed by this workspace. This action cannot be undone.
-          </p>
-          {destroyMutation.isError && (
-            <p className="text-xs text-red-400">
-              Error: {(destroyMutation.error as Error)?.message ?? 'Failed to start destroy'}
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardBody className="space-y-3">
+            <p className="text-sm text-red-300 font-medium">
+              Are you sure you want to destroy all resources in <span className="font-mono">{job.workspace}</span>?
             </p>
-          )}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleDestroy}
-              disabled={destroyMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 transition-colors"
-            >
-              {destroyMutation.isPending && <Loader2 size={12} className="animate-spin" />}
-              Confirm Destroy
-            </button>
-            <button
-              onClick={() => setShowDestroyConfirm(false)}
-              disabled={destroyMutation.isPending}
-              className="px-3 py-1.5 text-xs font-medium rounded border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 disabled:opacity-50 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+            <p className="text-xs text-zinc-400">
+              This will permanently destroy all infrastructure managed by this workspace. This action cannot be undone.
+            </p>
+            {destroyMutation.isError && (
+              <p className="text-xs text-red-400">
+                Error: {(destroyMutation.error as Error)?.message ?? 'Failed to start destroy'}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <Button intent="danger" size="sm" onClick={handleDestroy} disabled={destroyMutation.isPending}>
+                {destroyMutation.isPending && <Loader2 size={12} className="animate-spin" />}
+                Confirm Destroy
+              </Button>
+              <Button intent="secondary" size="sm" onClick={() => setShowDestroyConfirm(false)} disabled={destroyMutation.isPending}>
+                Cancel
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
       )}
 
       {/* Live stream for active jobs */}
@@ -166,8 +168,8 @@ function JobListView() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">Jobs</h1>
-          <p className="text-sm text-zinc-500 mt-1">Terraform job history and live monitoring</p>
+          <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Jobs</h1>
+          <p className="text-sm text-zinc-400 mt-1">Terraform job history and live monitoring</p>
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer select-none">

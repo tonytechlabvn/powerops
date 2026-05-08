@@ -54,6 +54,7 @@ export function AISettingsTab() {
   // Sync form with fetched config
   useEffect(() => {
     if (config) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs form fields when remote config arrives
       setProvider(config.provider)
       setModel(config.model)
       setMaxTokens(config.max_tokens)
@@ -66,6 +67,7 @@ export function AISettingsTab() {
     if (fetchedModels && fetchedModels.length > 0 && model) {
       const inList = fetchedModels.some(m => m.id === model)
       if (!inList) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- toggle custom-model UI when fetched list lacks current model
         setCustomModel(model)
         setUseCustomModel(true)
       } else {

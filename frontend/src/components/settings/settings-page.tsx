@@ -331,20 +331,20 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">Settings</h1>
-        <p className="text-sm text-zinc-500 mt-1">Manage your organization, teams, and API tokens</p>
+        <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Settings</h1>
+        <p className="text-sm text-zinc-400 mt-1">Manage your organization, teams, and API tokens</p>
       </div>
 
-      <div className="flex gap-1 bg-zinc-800 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 border-b border-zinc-800 -mb-px">
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+              'flex items-center gap-2 px-4 py-2 -mb-px text-sm font-medium transition-colors duration-150 border-b-2',
               activeTab === tab.id
-                ? 'bg-blue-500 text-white'
-                : 'text-zinc-400 hover:text-zinc-100'
+                ? 'border-blue-500 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-100',
             )}
           >
             {tab.icon}

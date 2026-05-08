@@ -32,6 +32,7 @@ export function AIChatSidebar({ workspaceId, currentFile, currentContent, onClos
   // When stream completes, commit streamed text to messages array
   useEffect(() => {
     if (state.status === 'done' && streamingRef.current && state.text) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- commits streamed text once on stream completion
       setMessages(prev => [...prev, { role: 'assistant', content: state.text }])
       streamingRef.current = false
       reset()

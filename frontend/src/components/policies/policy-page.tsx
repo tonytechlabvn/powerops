@@ -304,8 +304,8 @@ export function PolicyPage() {
     <div className="space-y-8 pb-10">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">Policies</h1>
-        <p className="text-sm text-zinc-500 mt-1">Manage OPA Rego policies and policy sets</p>
+        <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Policies</h1>
+        <p className="text-sm text-zinc-400 mt-1">Manage OPA Rego policies and policy sets</p>
       </div>
 
       {/* Section 1: Policies */}

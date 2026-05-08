@@ -80,7 +80,7 @@ export function KBChapterPage() {
             <span className="text-xs text-zinc-600 font-mono">
               {String(chapter.order).padStart(2, '0')}
             </span>
-            <h1 className="text-2xl font-bold text-zinc-100">{chapter.title}</h1>
+            <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">{chapter.title}</h1>
           </div>
           <div className="flex items-center gap-4 text-xs text-zinc-500">
             <span className="capitalize">{chapter.difficulty}</span>

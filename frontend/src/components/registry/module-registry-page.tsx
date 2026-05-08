@@ -19,18 +19,18 @@ export function ModuleRegistryPage() {
   )
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Module Registry</h1>
-          <p className="text-sm text-zinc-400 mt-0.5">
+          <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Module Registry</h1>
+          <p className="text-sm text-zinc-400 mt-1">
             Private Terraform modules for your organization
           </p>
         </div>
         <button
           onClick={() => setShowPublish(true)}
-          className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-md transition-colors"
+          className="inline-flex items-center gap-2 h-9 px-4 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-md transition-colors duration-150"
         >
           <Plus size={15} />
           Publish Module

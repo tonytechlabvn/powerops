@@ -14,7 +14,9 @@ export function CanvasPreviewSidebar({ onGenerate, isGenerating }: CanvasPreview
   const edges = useCanvasStore(s => s.edges)
   const getPreview = useCanvasStore(s => s.getPreview)
 
-  // Derive preview from stable state — avoids infinite re-render from selector returning new object
+  // Derive preview from stable state — avoids infinite re-render from selector returning new object.
+  // nodes/edges are tracked deps even though not directly used: getPreview() reads them from the store.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const preview = useMemo(() => getPreview(), [nodes, edges, getPreview])
   const nodeCount = nodes.length
   const edgeCount = edges.length

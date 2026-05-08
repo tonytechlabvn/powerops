@@ -30,7 +30,7 @@ function flattenTemplate(raw: any): Template {
     provider: meta.provider ?? '',
     description: meta.description ?? '',
     tags: meta.tags ?? [],
-    variables: (raw.variables ?? []).map((v: any) => ({
+    variables: (raw.variables ?? []).map((v: Record<string, unknown> & { default?: unknown; required?: boolean }) => ({
       ...v,
       required: v.required ?? (v.default === null || v.default === undefined),
     })),
@@ -42,7 +42,7 @@ export function useTemplates(provider?: string) {
   return useQuery({
     queryKey: queryKeys.templates(provider),
     queryFn: async () => {
-      const res = await apiClient.get<{ templates: any[] }>('/api/templates', provider ? { provider } : undefined)
+      const res = await apiClient.get<{ templates: unknown[] }>('/api/templates', provider ? { provider } : undefined)
       return (res.templates ?? []).map(flattenTemplate)
     },
   })
@@ -52,7 +52,7 @@ export function useTemplate(name: string) {
   return useQuery({
     queryKey: queryKeys.template(name),
     queryFn: async () => {
-      const raw = await apiClient.get<any>(`/api/templates/${name}`)
+      const raw = await apiClient.get<unknown>(`/api/templates/${name}`)
       return flattenTemplate(raw)
     },
     enabled: !!name,
@@ -75,7 +75,7 @@ export function useJobs(status?: string, includeHidden?: boolean) {
       const params: Record<string, string> = {}
       if (status) params.status = status
       if (includeHidden) params.include_hidden = 'true'
-      const res = await apiClient.get<{ jobs: any[] }>('/api/jobs', params)
+      const res = await apiClient.get<{ jobs: unknown[] }>('/api/jobs', params)
       return (res.jobs ?? []).map(mapJob)
     },
     refetchInterval: 5000,
@@ -86,7 +86,7 @@ export function useJob(id: string) {
   return useQuery({
     queryKey: queryKeys.job(id),
     queryFn: async () => {
-      const raw = await apiClient.get<any>(`/api/jobs/${id}`)
+      const raw = await apiClient.get<unknown>(`/api/jobs/${id}`)
       return mapJob(raw)
     },
     enabled: !!id,
@@ -112,7 +112,7 @@ export function useApprovals() {
   return useQuery({
     queryKey: queryKeys.approvals(),
     queryFn: async () => {
-      const res = await apiClient.get<{ approvals: any[] }>('/api/approvals')
+      const res = await apiClient.get<{ approvals: unknown[] }>('/api/approvals')
       return (res.approvals ?? []).map(mapApproval)
     },
     refetchInterval: 5000,

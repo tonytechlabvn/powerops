@@ -42,6 +42,7 @@ export function TemplateBrowserPanel({ onSelect }: Props) {
   const [filterProvider, setFilterProvider] = useState('')
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-filter-change pattern; safe because deps array gates this
     setLoading(true)
     setError(null)
     const params: Record<string, string> = {}

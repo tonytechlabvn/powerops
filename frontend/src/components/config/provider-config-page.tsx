@@ -156,8 +156,8 @@ export function ProviderConfigPage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">Configuration</h1>
-        <p className="text-sm text-zinc-500 mt-1">Manage provider credentials and settings</p>
+        <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Providers</h1>
+        <p className="text-sm text-zinc-400 mt-1">Manage provider credentials and settings</p>
       </div>
 
       <ProviderForm

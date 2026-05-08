@@ -92,8 +92,8 @@ export function KBLandingPage() {
         <div className="flex items-center gap-3">
           <BookOpen size={24} className="text-blue-400" />
           <div>
-            <h1 className="text-xl font-bold text-zinc-100">Knowledge Base</h1>
-            <p className="text-zinc-400 text-sm">Learn Terraform and PowerOps step by step</p>
+            <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Knowledge Base</h1>
+            <p className="text-zinc-400 text-sm mt-1">Learn Terraform and PowerOps step by step</p>
           </div>
         </div>
         <Link

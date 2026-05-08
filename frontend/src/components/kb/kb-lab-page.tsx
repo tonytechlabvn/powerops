@@ -73,7 +73,7 @@ export function KBLabPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <FlaskConical size={18} className="text-blue-400" />
-            <h1 className="text-xl font-bold text-zinc-100">{lab.title}</h1>
+            <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">{lab.title}</h1>
           </div>
           <p className="text-zinc-400 text-sm">{lab.description}</p>
         </div>

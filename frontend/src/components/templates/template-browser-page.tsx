@@ -7,6 +7,10 @@ import { useTemplates, useTemplate } from '../../hooks/use-api'
 import { TemplateCard } from './template-card'
 import { TemplateDeployForm } from './template-deploy-form'
 import { AutoDeployPanel } from './auto-deploy-panel'
+import { Card, CardHeader, CardBody } from '../_design-system/card'
+import { Badge } from '../_design-system/badge'
+import { EmptyState } from '../_design-system/empty-state'
+import { cn } from '../_design-system/lib/cn'
 
 // --- Detail / deploy view for a single template ---
 function TemplateDetailView({ name }: { name: string }) {
@@ -29,15 +33,13 @@ function TemplateDetailView({ name }: { name: string }) {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center gap-3">
-        <Link to="/templates" className="text-zinc-500 hover:text-zinc-300 transition-colors">
+      <div className="flex items-start gap-3">
+        <Link to="/templates" className="text-zinc-500 hover:text-zinc-200 transition-colors mt-1">
           <ChevronLeft size={20} />
         </Link>
-        <div>
-          <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-            {template.provider}
-          </span>
-          <h1 className="text-2xl font-bold text-zinc-100 mt-1">{template.name}</h1>
+        <div className="min-w-0">
+          <Badge intent="primary">{template.provider}</Badge>
+          <h1 className="text-2xl font-semibold text-zinc-100 mt-2 tracking-tight">{template.name}</h1>
           <p className="text-sm text-zinc-400 mt-1">{template.description}</p>
         </div>
       </div>
@@ -45,10 +47,12 @@ function TemplateDetailView({ name }: { name: string }) {
       {/* Auto Deploy — only for AWS EC2 templates */}
       {template.provider === 'aws' && <AutoDeployPanel />}
 
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4">Manual Deploy</h2>
-        <TemplateDeployForm template={template} />
-      </div>
+      <Card>
+        <CardHeader title="Manual Deploy" subtitle="Set variables and run a plan" />
+        <CardBody>
+          <TemplateDeployForm template={template} />
+        </CardBody>
+      </Card>
     </div>
   )
 }
@@ -65,8 +69,8 @@ function TemplateBrowserGrid() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">Templates</h1>
-          <p className="text-sm text-zinc-500 mt-1">Browse and deploy infrastructure templates</p>
+          <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Templates</h1>
+          <p className="text-sm text-zinc-400 mt-1">Browse and deploy infrastructure templates</p>
         </div>
         {isLoading && <Loader2 size={16} className="animate-spin text-zinc-500" />}
       </div>
@@ -76,12 +80,12 @@ function TemplateBrowserGrid() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setProvider(undefined)}
-            className={[
-              'text-xs px-3 py-1 rounded-full border transition-colors',
+            className={cn(
+              'text-xs px-3 py-1 rounded-full border transition-colors duration-150',
               !provider
-                ? 'bg-blue-600 border-blue-600 text-white'
-                : 'border-zinc-700 text-zinc-400 hover:border-zinc-500',
-            ].join(' ')}
+                ? 'bg-blue-500 border-blue-500 text-white'
+                : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+            )}
           >
             All
           </button>
@@ -89,12 +93,12 @@ function TemplateBrowserGrid() {
             <button
               key={p}
               onClick={() => setProvider(p)}
-              className={[
-                'text-xs px-3 py-1 rounded-full border transition-colors',
+              className={cn(
+                'text-xs px-3 py-1 rounded-full border transition-colors duration-150',
                 provider === p
-                  ? 'bg-blue-600 border-blue-600 text-white'
-                  : 'border-zinc-700 text-zinc-400 hover:border-zinc-500',
-              ].join(' ')}
+                  ? 'bg-blue-500 border-blue-500 text-white'
+                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+              )}
             >
               {p}
             </button>
@@ -109,7 +113,7 @@ function TemplateBrowserGrid() {
       )}
 
       {!isLoading && allTemplates.length === 0 && !error && (
-        <p className="text-zinc-500 text-sm">No templates found.</p>
+        <EmptyState title="No templates found" description="Try a different provider filter or check back later." />
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
